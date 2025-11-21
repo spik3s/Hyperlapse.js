@@ -2,3 +2,5 @@ node_modules/
 .vite/
 .env
 .DS_Store
+dist/
+*.log

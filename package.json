@@ -26,6 +26,7 @@
   },
   "homepage": "https://github.com/spik3s/Hyperlapse.js#readme",
   "dependencies": {
+    "dat.gui": "^0.7.9",
     "three": "^0.174.0"
   },
   "devDependencies": {
