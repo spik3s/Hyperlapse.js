@@ -201,7 +201,7 @@ export var Hyperlapse = function(container, params) {
 
 	_container.appendChild( _renderer.domElement );
 
-	_loader = new GSVPANO.PanoLoader( {zoom: _zoom} );
+	_loader = new GSVPANO.PanoLoader( {zoom: _zoom, apiKey: _params.apiKey} );
 	_loader.onError = function(message) {
 		handleError({message:message});
 	};

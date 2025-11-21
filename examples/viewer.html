@@ -4,14 +4,12 @@
 	<meta http-equiv="content-type" content="text/html; charset=UTF-8"/> 
 	<title>Viewer Example</title> 
 
-	<script src="https://maps.googleapis.com/maps/api/js?v=3.exp&key=YOUR_API_KEY" type="text/javascript"></script>
 	<script src="js/dat.gui.min.js"></script>
 	<script type="module">
 		import { Hyperlapse } from '../src/Hyperlapse.js';
+		import { loadGoogleMaps } from '../src/GoogleMapsLoader.js';
 	
-		var start_point = new google.maps.LatLng(44.3431,6.783936);
-		var end_point = new google.maps.LatLng(44.340578,6.782684);
-		var lookat_point = new google.maps.LatLng(44.34232747290594, 6.786460550292986);
+		var start_point, end_point, lookat_point;
 		var map, directions_renderer, directions_service, streetview_service, geocoder;
 		var start_pin, end_pin, pivot_pin, camera_pin;
 		var _elevation = 0;
@@ -22,7 +20,26 @@
 			document.getElementById("text").innerHTML = msg;
 		}
 
-		function init() {
+		async function init() {
+
+			const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
+			if (!apiKey) {
+				console.error("VITE_GOOGLE_MAPS_API_KEY is missing in .env file");
+				alert("Please set VITE_GOOGLE_MAPS_API_KEY in .env file");
+				return;
+			}
+
+			try {
+				await loadGoogleMaps(apiKey);
+			} catch (e) {
+				console.error("Failed to load Google Maps", e);
+				return;
+			}
+
+			// Initialize points after Google Maps is loaded
+			start_point = new google.maps.LatLng(44.3431,6.783936);
+			end_point = new google.maps.LatLng(44.340578,6.782684);
+			lookat_point = new google.maps.LatLng(44.34232747290594, 6.786460550292986);
 
 			if( window.location.hash ) {
 				parts = window.location.hash.substr( 1 ).split( ',' );
@@ -145,7 +162,8 @@
 				use_lookat: true,
 				distance_between_points: 5,
 				max_points: 100,
-				elevation: _elevation
+				elevation: _elevation,
+				apiKey: apiKey
 			});
 			
 			

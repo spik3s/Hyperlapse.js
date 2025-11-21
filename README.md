@@ -12,11 +12,32 @@ This library was written to create dynamic hyper-lapse (time-lapse with movement
 
 [Video of what's possible.](https://vimeo.com/63653873)
 
+## Development
+
+To run the examples locally, you need to set up a `.env` file with your Google Maps API key.
+
+1. Copy `.env.example` to `.env` (or create a new `.env` file):
+   ```bash
+   cp .env.example .env
+   ```
+2. Edit `.env` and add your API key:
+   ```
+   VITE_GOOGLE_MAPS_API_KEY=YOUR_API_KEY_HERE
+   ```
+3. Install dependencies and start the development server:
+   ```bash
+   npm install
+   npm run dev
+   ```
+
 ## Example
 
 [Simple example](http://tllabs.io/hyperlapse/examples/simple.html)
 
 ```js
+import { Hyperlapse } from './src/Hyperlapse.js';
+// Make sure to load Google Maps API before using Hyperlapse
+
 var hyperlapse = new Hyperlapse(document.getElementById('pano'), {
 	lookat: new google.maps.LatLng(37.81409525128964,-122.4775045005249),
 	zoom: 1,
@@ -43,7 +64,7 @@ var route = {
 	request:{
 		origin: new google.maps.LatLng(37.816480000000006,-122.47825,37),
 		destination: new google.maps.LatLng(37.81195,-122.47773000000001),
-		travelMode: google.maps.DirectionsTravelMode.DRIVING
+		travelMode: google.maps.TravelMode.DRIVING
 	}
 };
 
@@ -58,9 +79,8 @@ directions_service.route(route.request, function(response, status) {
 
 ## Dependencies
 
-- [Three.js](https://github.com/mrdoob/three.js) (r57)
-- a modified version of [GSVPano.js](https://github.com/pnitsch/GSVPano.js)
-- [Google Maps API v3.12](https://developers.google.com/maps/documentation/javascript/3.exp/reference)
+- [Three.js](https://github.com/mrdoob/three.js) (Latest)
+- [Google Maps JavaScript API](https://developers.google.com/maps/documentation/javascript/overview)
 
   
 ## API Docs 
@@ -91,4 +111,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 THE SOFTWARE.
-
