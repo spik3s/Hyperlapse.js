@@ -60,16 +60,44 @@
 			}
 
 			function changeHash() {
-				window.location.hash = start_pin.getPosition().lat() + ',' + start_pin.getPosition().lng() + ','
-					+ pivot_pin.getPosition().lat() + ',' + pivot_pin.getPosition().lng() + ','
-					+ end_pin.getPosition().lat() + ',' + end_pin.getPosition().lng() + ','
+				// AdvancedMarkerElement position is LatLng or LatLngLiteral.
+				// If it's LatLng, it has lat()/lng() methods. If literal, .lat/.lng properties.
+				// Google Maps JS API usually converts it to LatLng object.
+				// But let's be safe and check or assume LatLng object which has .lat() .lng() methods?
+				// Actually, AdvancedMarkerElement.position getter returns LatLng | LatLngLiteral | null.
+				// If initialized with LatLng, it usually stays as object but might normalize.
+				// However, commonly .lat and .lng are properties on literal, or methods on object.
+				// Let's try to use methods if available, or properties.
+				// But wait, in previous step I replaced it with .lat .lng properties in changeHash?
+				// "window.location.hash = start_pin.position.lat + ',' + start_pin.position.lng ..."
+				// start_point is google.maps.LatLng. So start_pin.position is likely google.maps.LatLng.
+				// google.maps.LatLng has .lat() and .lng() methods, not properties!
+				// So "start_pin.position.lat" would be undefined if it's a LatLng object.
+
+				var s = start_pin.position;
+				var p = pivot_pin.position;
+				var e = end_pin.position;
+
+				var slat = (typeof s.lat === 'function') ? s.lat() : s.lat;
+				var slng = (typeof s.lng === 'function') ? s.lng() : s.lng;
+
+				var plat = (typeof p.lat === 'function') ? p.lat() : p.lat;
+				var plng = (typeof p.lng === 'function') ? p.lng() : p.lng;
+
+				var elat = (typeof e.lat === 'function') ? e.lat() : e.lat;
+				var elng = (typeof e.lng === 'function') ? e.lng() : e.lng;
+
+				window.location.hash = slat + ',' + slng + ','
+					+ plat + ',' + plng + ','
+					+ elat + ',' + elng + ','
 					+ _elevation;
 			}
 
 			var mapOpt = { 
 				mapTypeId: google.maps.MapTypeId.ROADMAP,
 				center: start_point,
-				zoom: 15
+				zoom: 15,
+				mapId: "DEMO_MAP_ID" // Required for AdvancedMarkerElement
 			};
 
 			map = new google.maps.Map(document.getElementById("map"), mapOpt);
@@ -83,47 +111,47 @@
 			directions_renderer.setMap(map);
 			directions_renderer.setOptions({preserveViewport:true});
 
-			camera_pin = new google.maps.Marker({
+			camera_pin = new google.maps.marker.AdvancedMarkerElement({
 				position: start_point,
 				map: map
 			});
 
-			start_pin = new google.maps.Marker({
+			start_pin = new google.maps.marker.AdvancedMarkerElement({
 				position: start_point,
-				draggable: true,
+				gmpDraggable: true,
 				map: map
 			});
 
-			google.maps.event.addListener (start_pin, 'dragend', function (event) {
-				snapToRoad(start_pin.getPosition(), function(result) {
-					start_pin.setPosition(result);
+			start_pin.addEventListener('dragend', function (event) {
+				snapToRoad(start_pin.position, function(result) {
+					start_pin.position = result;
 					start_point = result;
 					changeHash();
 				});
 			});
 
-			end_pin = new google.maps.Marker({
+			end_pin = new google.maps.marker.AdvancedMarkerElement({
 				position: end_point,
-				draggable: true,
+				gmpDraggable: true,
 				map: map
 			});
 
-			google.maps.event.addListener (end_pin, 'dragend', function (event) {
-				snapToRoad(end_pin.getPosition(), function(result) {
-					end_pin.setPosition(result);
+			end_pin.addEventListener('dragend', function (event) {
+				snapToRoad(end_pin.position, function(result) {
+					end_pin.position = result;
 					end_point = result;
 					changeHash();
 				});
 			});
 
-			pivot_pin = new google.maps.Marker({
+			pivot_pin = new google.maps.marker.AdvancedMarkerElement({
 				position: lookat_point,
-				draggable: true,
+				gmpDraggable: true,
 				map: map
 			});
 
-			google.maps.event.addListener (pivot_pin, 'dragend', function (event) {
-				hyperlapse.setLookat( pivot_pin.getPosition() );
+			pivot_pin.addEventListener('dragend', function (event) {
+				hyperlapse.setLookat( pivot_pin.position );
 				changeHash();
 			});
 
@@ -173,10 +201,12 @@
 			};
 
 			hyperlapse.onRouteProgress = function(e) {
-				_route_markers.push( new google.maps.Marker({
+				const iconImg = document.createElement('img');
+				iconImg.src = "dot_marker.png";
+				_route_markers.push( new google.maps.marker.AdvancedMarkerElement({
 					position: e.point.location,
-					draggable: false,
-					icon: "dot_marker.png",
+					gmpDraggable: false,
+					content: iconImg,
 					map: map
 					})
 				);
@@ -194,19 +224,19 @@
 
 			hyperlapse.onLoadComplete = function(e) {
 				show( "" +
-					"Start: " + start_pin.getPosition().toString() + 
-					"<br>End: " + end_pin.getPosition().toString() + 
-					"<br>Lookat: " + pivot_pin.getPosition().toString() + 
+					"Start: " + start_pin.position.toString() +
+					"<br>End: " + end_pin.position.toString() +
+					"<br>Lookat: " + pivot_pin.position.toString() +
 					"<br>Ready." );
 			};
 
 			hyperlapse.onFrame = function(e) {
 				show( "" +
-					"Start: " + start_pin.getPosition().toString() + 
-					"<br>End: " + end_pin.getPosition().toString() + 
-					"<br>Lookat: " + pivot_pin.getPosition().toString() + 
+					"Start: " + start_pin.position.toString() +
+					"<br>End: " + end_pin.position.toString() +
+					"<br>Lookat: " + pivot_pin.position.toString() +
 					"<br>Position: "+ (e.position+1) +" of "+ hyperlapse.length() );
-				camera_pin.setPosition(e.point.location);
+				camera_pin.position = e.point.location;
 			};
 
 			pano.addEventListener( 'mousedown', function(e){
