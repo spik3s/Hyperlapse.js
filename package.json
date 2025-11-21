@@ -1,0 +1,29 @@
+{
+  "name": "app",
+  "version": "1.0.0",
+  "description": "![image](https://s3.amazonaws.com/tllabs.hyperlapse/hyperlapse.gif)",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs",
+    "example": "examples"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/spik3s/Hyperlapse.js.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/spik3s/Hyperlapse.js/issues"
+  },
+  "homepage": "https://github.com/spik3s/Hyperlapse.js#readme",
+  "dependencies": {
+    "three": "^0.181.2",
+    "vite": "^7.2.4"
+  }
+}

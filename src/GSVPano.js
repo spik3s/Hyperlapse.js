@@ -1,4 +1,5 @@
-var GSVPANO = GSVPANO || {};
+export var GSVPANO = {};
+
 GSVPANO.PanoLoader = function (parameters) {
 
 	'use strict';
@@ -80,13 +81,13 @@ GSVPANO.PanoLoader = function (parameters) {
 	
 		for( y = 0; y < h; y++) {
 			for( x = 0; x < w; x++) {
-				url = 'http://maps.google.com/cbk?output=tile&panoid=' + panoId + '&zoom=' + _zoom + '&x=' + x + '&y=' + y + '&' + Date.now();
+				url = 'https://maps.google.com/cbk?output=tile&panoid=' + panoId + '&zoom=' + _zoom + '&x=' + x + '&y=' + y + '&' + Date.now();
 				(function (x, y) { 
 					var img = new Image();
 					img.addEventListener('load', function () {
 						self.composeFromTile(x, y, this);
 					});
-					img.crossOrigin = '';
+					img.crossOrigin = 'anonymous';
 					img.src = url;
 				})(x, y);
 			}
@@ -98,11 +99,25 @@ GSVPANO.PanoLoader = function (parameters) {
 	
 		console.log('Load for', location);
 		var self = this;
-		_panoClient.getPanoramaByLocation(location, 50, function (result, status) {
+
+		var request = {
+			location: location,
+			radius: 50
+		};
+
+		_panoClient.getPanorama(request, function (result, status) {
 			if (status === google.maps.StreetViewStatus.OK) {
 				if( self.onPanoramaData ) self.onPanoramaData( result );
-				rotation = result.tiles.centerHeading * Math.PI / 180.0;
-				pitch = result.tiles.originPitch;
+
+				var h = result.tiles ? result.tiles.centerHeading : 0;
+				if (result.tiles && result.tiles.centerHeading !== undefined) {
+					rotation = result.tiles.centerHeading * Math.PI / 180.0;
+					pitch = result.tiles.originPitch;
+				} else {
+					rotation = 0;
+					pitch = 0;
+				}
+
 				copyright = result.copyright;
 				self.copyright = result.copyright;
 				_panoId = result.location.pano;

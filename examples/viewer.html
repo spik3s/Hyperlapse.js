@@ -4,12 +4,10 @@
 	<meta http-equiv="content-type" content="text/html; charset=UTF-8"/> 
 	<title>Viewer Example</title> 
 
-	<script src="https://maps.googleapis.com/maps/api/js?v=3.exp&sensor=false" type="text/javascript"></script> 
+	<script src="https://maps.googleapis.com/maps/api/js?v=3.exp&key=YOUR_API_KEY" type="text/javascript"></script>
 	<script src="js/dat.gui.min.js"></script>
-	<script src="js/three.min.js"></script>
-	<script src="js/GSVPano.js"></script>
-	<script src="../src/Hyperlapse.js"></script>
-	<script> 
+	<script type="module">
+		import { Hyperlapse } from '../src/Hyperlapse.js';
 	
 		var start_point = new google.maps.LatLng(44.3431,6.783936);
 		var end_point = new google.maps.LatLng(44.340578,6.782684);
@@ -18,6 +16,7 @@
 		var start_pin, end_pin, pivot_pin, camera_pin;
 		var _elevation = 0;
 		var _route_markers = [];
+		var parts;
 
 		function show(msg) {
 			document.getElementById("text").innerHTML = msg;
@@ -260,10 +259,10 @@
 						marker.setMap(null);
 					}
 
-					request = {
+					var request = {
 						origin: start_point, 
 						destination: end_point, 
-						travelMode: google.maps.DirectionsTravelMode.DRIVING
+						travelMode: google.maps.TravelMode.DRIVING
 					};
 
 					directions_service.route(request, function(response, status) {
