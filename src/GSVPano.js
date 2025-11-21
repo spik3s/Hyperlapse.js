@@ -82,10 +82,9 @@ GSVPANO.PanoLoader = function (parameters) {
 		for( y = 0; y < h; y++) {
 			for( x = 0; x < w; x++) {
 				url = 'https://streetviewpixels-pa.googleapis.com/v1/tile?cb_client=maps_sv.tactile&panoid=' + panoId + '&x=' + x + '&y=' + y + '&zoom=' + _zoom + '&nbt=1&fover=2';
-				// API Key is not required for this endpoint and might cause 403 if passed.
-				// if (_parameters.apiKey) {
-				// 	url += '&key=' + _parameters.apiKey;
-				// }
+				if (_parameters.apiKey) {
+					url += '&key=' + _parameters.apiKey;
+				}
 
 				(function (x, y) { 
 					var img = new Image();
