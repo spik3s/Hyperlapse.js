@@ -124,8 +124,12 @@
 
 			start_pin.addEventListener('dragend', function (event) {
 				snapToRoad(start_pin.position, function(result) {
-					start_pin.position = result;
-					start_point = result;
+					if (result) {
+						start_pin.position = result;
+						start_point = result;
+					} else {
+						start_point = start_pin.position;
+					}
 					changeHash();
 				});
 			});
@@ -138,8 +142,12 @@
 
 			end_pin.addEventListener('dragend', function (event) {
 				snapToRoad(end_pin.position, function(result) {
-					end_pin.position = result;
-					end_point = result;
+					if (result) {
+						end_pin.position = result;
+						end_point = result;
+					} else {
+						end_point = end_pin.position;
+					}
 					changeHash();
 				});
 			});

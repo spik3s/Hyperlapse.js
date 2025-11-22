@@ -49,7 +49,9 @@ GSVPANO.PanoLoader = function (parameters) {
 
 	this.composeFromTile = function (x, y, texture) {
 	
-		_ctx.drawImage(texture, x * 512, y * 512);
+		if (texture) {
+			_ctx.drawImage(texture, x * 512, y * 512);
+		}
 		_count++;
 		
 		var p = Math.round(_count * 100 / _total);
@@ -90,6 +92,9 @@ GSVPANO.PanoLoader = function (parameters) {
 					var img = new Image();
 					img.addEventListener('load', function () {
 						self.composeFromTile(x, y, this);
+					});
+					img.addEventListener('error', function () {
+						self.composeFromTile(x, y, null);
 					});
 					img.crossOrigin = 'anonymous';
 					img.src = url;
