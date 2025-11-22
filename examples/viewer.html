@@ -338,6 +338,9 @@
 						marker.setMap(null);
 					}
 
+					if(start_pin) start_point = start_pin.position;
+					if(end_pin) end_point = end_pin.position;
+
 					var request = {
 						origin: start_point, 
 						destination: end_point, 
