@@ -390,7 +390,7 @@
 				generate:function(){
 					show( "Generating route..." );
 
-					directions_renderer.setDirections({routes: []});
+					directions_renderer.setDirections(null);
 
 					var marker;
 					while(_route_markers.length > 0) {
