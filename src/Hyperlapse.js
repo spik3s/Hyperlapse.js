@@ -1,8 +1,11 @@
 /**
- * @overview Hyperapse.js - JavaScript hyper-lapse utility for Google Street View.
+ * @overview Hyperlapse.js - JavaScript hyper-lapse utility for Google Street View.
  * @author Peter Nitsch
  * @copyright Teehan+Lax 2013
  */
+
+import * as THREE from 'three';
+import { GSVPANO } from './GSVPano.js';
 
 Number.prototype.toRad = function() {
 	return this * Math.PI / 180;
@@ -23,8 +26,8 @@ var pointOnLine = function(t, a, b) {
 	var lat1 = a.lat().toRad(), lon1 = a.lng().toRad();
 	var lat2 = b.lat().toRad(), lon2 = b.lng().toRad();
 
-	x = lat1 + t * (lat2 - lat1);
-	y = lon1 + t * (lon2 - lon1);
+	var x = lat1 + t * (lat2 - lat1);
+	var y = lon1 + t * (lon2 - lon1);
 
 	return new google.maps.LatLng(x.toDeg(), y.toDeg());
 };
@@ -111,7 +114,7 @@ var HyperlapsePoint = function(location, pano_id, params ) {
  * @param {Number} [params.elevation=0]
  * @param {Number} [params.tilt=0]
  */
-var Hyperlapse = function(container, params) {
+export var Hyperlapse = function(container, params) {
 
 	"use strict";
 
@@ -136,6 +139,7 @@ var Hyperlapse = function(container, params) {
 		_lookat_heading = 0, _lookat_elevation = 0,
 		_canvas, _context,
 		_camera, _scene, _renderer, _mesh,
+		_target = new THREE.Vector3( 0, 0, 0 ),
 		_loader, _cancel_load = false,
 		_ctime = Date.now(),
 		_ptime = 0, _dtime = 0,
@@ -174,30 +178,30 @@ var Hyperlapse = function(container, params) {
 	_context = _canvas.getContext( '2d' );
 
 	_camera = new THREE.PerspectiveCamera( _fov, _w/_h, 1, 1100 );
-	_camera.target = new THREE.Vector3( 0, 0, 0 );
+	// _camera.target = new THREE.Vector3( 0, 0, 0 ); // Removed in newer Three.js
 
 	_scene = new THREE.Scene();
 	_scene.add( _camera );
 
-	try {
-		var isWebGL = !!window.WebGLRenderingContext && !!document.createElement('canvas').getContext('experimental-webgl');
-	}catch(e){
-		console.log(e);
-	}
+	// WebGL detection simplified or removed as modern browsers support it
 
 	_renderer = new THREE.WebGLRenderer();
-	_renderer.autoClearColor = false;
+	_renderer.autoClear = false; // autoClearColor is deprecated
 	_renderer.setSize( _w, _h );
 
+	var _geometry = new THREE.SphereGeometry( 500, 60, 40 );
+	// Invert geometry to view from inside
+	_geometry.scale(-1, 1, 1);
+
 	_mesh = new THREE.Mesh( 
-		new THREE.SphereGeometry( 500, 60, 40 ), 
+		_geometry,
 		new THREE.MeshBasicMaterial( { map: new THREE.Texture(), side: THREE.DoubleSide } ) 
 	);
 	_scene.add( _mesh );
 
 	_container.appendChild( _renderer.domElement );
 
-	_loader = new GSVPANO.PanoLoader( {zoom: _zoom} );
+	_loader = new GSVPANO.PanoLoader( {zoom: _zoom, apiKey: _params.apiKey} );
 	_loader.onError = function(message) {
 		handleError({message:message});
 	};
@@ -431,6 +435,9 @@ var Hyperlapse = function(container, params) {
 		_mesh.material.map.image = _h_points[_point_index].image;
 		_mesh.material.map.needsUpdate = true;
 
+		// In newer three.js, we need to invalidate the texture if we change the image
+		// But map.needsUpdate = true handles it.
+
 		_origin_heading = _h_points[_point_index].heading;
 		_origin_pitch = _h_points[_point_index].pitch;
 
@@ -470,10 +477,10 @@ var Hyperlapse = function(container, params) {
 			var phi = ( 90 - _lat ).toRad();
 			var theta = _lon.toRad();
 
-			_camera.target.x = 500 * Math.sin( phi ) * Math.cos( theta );
-			_camera.target.y = 500 * Math.cos( phi );
-			_camera.target.z = 500 * Math.sin( phi ) * Math.sin( theta );
-			_camera.lookAt( _camera.target );
+			_target.x = 500 * Math.sin( phi ) * Math.cos( theta );
+			_target.y = 500 * Math.cos( phi );
+			_target.z = 500 * Math.sin( phi ) * Math.sin( theta );
+			_camera.lookAt( _target );
 			_camera.rotation.z -= o_z;
 
 			if(self.use_rotation_comp) {

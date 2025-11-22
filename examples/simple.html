@@ -3,19 +3,31 @@
 <head> 
 	<title>Simple Example</title> 
 
-	<script src="https://maps.googleapis.com/maps/api/js?v=3.exp&sensor=false" type="text/javascript"></script> 
-	<script src="js/three.min.js"></script>
-	<script src="js/GSVPano.js"></script>
-	<script src="../src/Hyperlapse.js"></script>
-	<script> 
+	<script type="module">
+		import { Hyperlapse } from '../src/Hyperlapse.js';
+		import { loadGoogleMaps } from '../src/GoogleMapsLoader.js';
 
-		function init() {
+		async function init() {
+			const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
+			if (!apiKey) {
+				console.error("VITE_GOOGLE_MAPS_API_KEY is missing in .env file");
+				alert("Please set VITE_GOOGLE_MAPS_API_KEY in .env file");
+				return;
+			}
+
+			try {
+				await loadGoogleMaps(apiKey);
+			} catch (e) {
+				console.error("Failed to load Google Maps", e);
+				return;
+			}
 
 			var hyperlapse = new Hyperlapse(document.getElementById('pano'), {
 				lookat: new google.maps.LatLng(37.81409525128964,-122.4775045005249),
 				zoom: 1,
 				use_lookat: true,
-				elevation: 50
+				elevation: 50,
+				apiKey: apiKey
 			});
 
 			hyperlapse.onError = function(e) {
@@ -37,7 +49,7 @@
 				request:{
 					origin: new google.maps.LatLng(37.816480000000006,-122.47825,37),
 					destination: new google.maps.LatLng(37.81195,-122.47773000000001),
-					travelMode: google.maps.DirectionsTravelMode.DRIVING
+					travelMode: google.maps.TravelMode.DRIVING
 				}
 			};
 
