@@ -316,6 +316,7 @@
 				distance_between_points:10, 
 				max_points:100, 
 				fov: 80, 
+				zoom: 1,
 				elevation:Math.floor(_elevation), 
 				tilt:0, 
 				millis:50, 
@@ -398,6 +399,11 @@
 			var max_points = parameters.add(o, 'max_points', 10, 300);
 			max_points.onChange(function(value) {
 				hyperlapse.setMaxPoints(value);
+			});
+
+			var zoom_control = parameters.add(o, 'zoom', 0, 5).step(1);
+			zoom_control.onChange(function(value) {
+				hyperlapse.setZoom(value);
 			});
 
 			var fov_control = parameters.add(o, 'fov', 1, 180);

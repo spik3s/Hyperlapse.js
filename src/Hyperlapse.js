@@ -662,6 +662,14 @@ export var Hyperlapse = function(container, params) {
 	};
 
 	/**
+	 * @param {Number} z
+	 */
+	this.setZoom = function(z) {
+		_zoom = z;
+		_loader.setZoom(_zoom);
+	};
+
+	/**
 	 * @param {Number} width
 	 * @param {Number} height
 	 */
