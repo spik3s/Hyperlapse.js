@@ -113,13 +113,23 @@
 
 			camera_pin = new google.maps.marker.AdvancedMarkerElement({
 				position: start_point,
-				map: map
+				map: map,
+				content: new google.maps.marker.PinElement({
+					background: '#2196F3', // Blue
+					borderColor: '#1565C0',
+					glyphColor: 'white',
+				}).element,
 			});
 
 			start_pin = new google.maps.marker.AdvancedMarkerElement({
 				position: start_point,
 				gmpDraggable: true,
-				map: map
+				map: map,
+				content: new google.maps.marker.PinElement({
+					background: '#4CAF50', // Green
+					borderColor: '#2E7D32',
+					glyphColor: 'white',
+				}).element,
 			});
 
 			start_pin.addEventListener('dragend', function (event) {
@@ -137,7 +147,12 @@
 			end_pin = new google.maps.marker.AdvancedMarkerElement({
 				position: end_point,
 				gmpDraggable: true,
-				map: map
+				map: map,
+				content: new google.maps.marker.PinElement({
+					background: '#F44336', // Red
+					borderColor: '#C62828',
+					glyphColor: 'white',
+				}).element,
 			});
 
 			end_pin.addEventListener('dragend', function (event) {
@@ -155,7 +170,12 @@
 			pivot_pin = new google.maps.marker.AdvancedMarkerElement({
 				position: lookat_point,
 				gmpDraggable: true,
-				map: map
+				map: map,
+				content: new google.maps.marker.PinElement({
+					background: '#FFEB3B', // Yellow
+					borderColor: '#FBC02D',
+					glyphColor: 'black',
+				}).element,
 			});
 
 			pivot_pin.addEventListener('dragend', function (event) {
@@ -209,12 +229,15 @@
 			};
 
 			hyperlapse.onRouteProgress = function(e) {
-				const iconImg = document.createElement('img');
-				iconImg.src = "dot_marker.png";
 				_route_markers.push( new google.maps.marker.AdvancedMarkerElement({
 					position: e.point.location,
 					gmpDraggable: false,
-					content: iconImg,
+					content: new google.maps.marker.PinElement({
+						background: '#FFEB3B', // Yellow
+						borderColor: '#FBC02D',
+						glyphColor: 'black',
+						scale: 0.5, // Make it smaller
+					}).element,
 					map: map
 					})
 				);
