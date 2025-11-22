@@ -43,6 +43,7 @@ GSVPANO.PanoLoader = function (parameters) {
 			h = (512 * Math.pow(2, _zoom - 1));
 		_canvas.width = w;
 		_canvas.height = h;
+		_ctx.setTransform(1, 0, 0, 1, 0, 0);
 		_ctx.translate( _canvas.width, 0);
 		_ctx.scale(-1, 1);
 	};
