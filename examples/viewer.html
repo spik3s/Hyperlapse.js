@@ -123,14 +123,14 @@
 			});
 
 			start_pin.addEventListener('dragend', function (event) {
+				start_point = start_pin.position;
+				changeHash();
 				snapToRoad(start_pin.position, function(result) {
 					if (result) {
 						start_pin.position = result;
 						start_point = result;
-					} else {
-						start_point = start_pin.position;
+						changeHash();
 					}
-					changeHash();
 				});
 			});
 
@@ -141,14 +141,14 @@
 			});
 
 			end_pin.addEventListener('dragend', function (event) {
+				end_point = end_pin.position;
+				changeHash();
 				snapToRoad(end_pin.position, function(result) {
 					if (result) {
 						end_pin.position = result;
 						end_point = result;
-					} else {
-						end_point = end_pin.position;
+						changeHash();
 					}
-					changeHash();
 				});
 			});
 
