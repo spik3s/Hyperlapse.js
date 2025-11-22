@@ -126,6 +126,8 @@
 
 			directions_renderer.addListener('directions_changed', function() {
 				var result = directions_renderer.getDirections();
+				if (!result || !result.routes || !result.routes.length) return;
+
 				var route = result.routes[0];
 				var legs = route.legs;
 
