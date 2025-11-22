@@ -83,10 +83,11 @@ GSVPANO.PanoLoader = function (parameters) {
 	
 		for( y = 0; y < h; y++) {
 			for( x = 0; x < w; x++) {
-				url = 'https://streetviewpixels-pa.googleapis.com/v1/tile?cb_client=maps_sv.tactile&panoid=' + panoId + '&x=' + x + '&y=' + y + '&zoom=' + _zoom + '&nbt=1&fover=2';
-				if (_parameters.apiKey) {
-					url += '&key=' + _parameters.apiKey;
-				}
+				url = 'https://geo0.ggpht.com/cbk?cb_client=maps_sv.tactile&authuser=0&hl=en&gl=us&output=tile&panoid=' + panoId + '&x=' + x + '&y=' + y + '&zoom=' + _zoom + '&nbt=1&fover=2';
+
+				// if (_parameters.apiKey) {
+				// 	url += '&key=' + _parameters.apiKey;
+				// }
 
 				(function (x, y) { 
 					var img = new Image();
