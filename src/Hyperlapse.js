@@ -688,6 +688,11 @@ export var Hyperlapse = function(container, params) {
 		_raw_points.remove(0,-1);
 		_h_points.remove(0,-1);
 
+		if(_mesh.material.map) {
+			_mesh.material.map.dispose();
+			_mesh.material.map = new THREE.Texture();
+		}
+
 		self.tilt = 0;
 
 		_lat = 0;
