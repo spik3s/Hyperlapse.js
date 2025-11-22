@@ -401,6 +401,11 @@
 					if(start_pin) start_point = start_pin.position;
 					if(end_pin) end_point = end_pin.position;
 
+					if (!start_point || !end_point) {
+						console.log("Start or End point not defined.");
+						return;
+					}
+
 					var request = {
 						origin: start_point, 
 						destination: end_point, 
