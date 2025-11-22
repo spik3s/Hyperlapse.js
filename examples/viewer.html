@@ -14,6 +14,8 @@
 		var start_pin, end_pin, pivot_pin, camera_pin;
 		var _elevation = 0;
 		var _route_markers = [];
+		var _waypoint_markers = [];
+		var _waypoints = [];
 		var parts;
 
 		function show(msg) {
@@ -47,6 +49,18 @@
 				lookat_point = new google.maps.LatLng(parts[2], parts[3]);
 				end_point = new google.maps.LatLng(parts[4], parts[5]);
 				_elevation = parts[6] || 0;
+
+				// Parse waypoints (pairs of lat,lng after elevation)
+				if (parts.length > 7) {
+					for (var i = 7; i < parts.length; i += 2) {
+						if (parts[i] && parts[i+1]) {
+							_waypoints.push({
+								location: new google.maps.LatLng(parts[i], parts[i+1]),
+								stopover: true
+							});
+						}
+					}
+				}
 			} 
 
 			/* Map */
@@ -60,20 +74,6 @@
 			}
 
 			function changeHash() {
-				// AdvancedMarkerElement position is LatLng or LatLngLiteral.
-				// If it's LatLng, it has lat()/lng() methods. If literal, .lat/.lng properties.
-				// Google Maps JS API usually converts it to LatLng object.
-				// But let's be safe and check or assume LatLng object which has .lat() .lng() methods?
-				// Actually, AdvancedMarkerElement.position getter returns LatLng | LatLngLiteral | null.
-				// If initialized with LatLng, it usually stays as object but might normalize.
-				// However, commonly .lat and .lng are properties on literal, or methods on object.
-				// Let's try to use methods if available, or properties.
-				// But wait, in previous step I replaced it with .lat .lng properties in changeHash?
-				// "window.location.hash = start_pin.position.lat + ',' + start_pin.position.lng ..."
-				// start_point is google.maps.LatLng. So start_pin.position is likely google.maps.LatLng.
-				// google.maps.LatLng has .lat() and .lng() methods, not properties!
-				// So "start_pin.position.lat" would be undefined if it's a LatLng object.
-
 				var s = start_pin.position;
 				var p = pivot_pin.position;
 				var e = end_pin.position;
@@ -87,10 +87,20 @@
 				var elat = (typeof e.lat === 'function') ? e.lat() : e.lat;
 				var elng = (typeof e.lng === 'function') ? e.lng() : e.lng;
 
-				window.location.hash = slat + ',' + slng + ','
+				var hash = slat + ',' + slng + ','
 					+ plat + ',' + plng + ','
 					+ elat + ',' + elng + ','
 					+ _elevation;
+
+				// Append waypoints
+				for (var i = 0; i < _waypoints.length; i++) {
+					var wp = _waypoints[i].location;
+					var wplat = (typeof wp.lat === 'function') ? wp.lat() : wp.lat;
+					var wplng = (typeof wp.lng === 'function') ? wp.lng() : wp.lng;
+					hash += ',' + wplat + ',' + wplng;
+				}
+
+				window.location.hash = hash;
 			}
 
 			var mapOpt = { 
@@ -107,9 +117,61 @@
 			overlay.setMap(map);
 
 			directions_service = new google.maps.DirectionsService();
-			directions_renderer = new google.maps.DirectionsRenderer({draggable:false, markerOptions:{visible: false}});
+			directions_renderer = new google.maps.DirectionsRenderer({
+				draggable: true,
+				markerOptions: { opacity: 0 }, // Hide default markers but keep them draggable
+				preserveViewport: true
+			});
 			directions_renderer.setMap(map);
-			directions_renderer.setOptions({preserveViewport:true});
+
+			directions_renderer.addListener('directions_changed', function() {
+				var result = directions_renderer.getDirections();
+				var route = result.routes[0];
+				var legs = route.legs;
+
+				// Update Start and End based on route result
+				var start_loc = legs[0].start_location;
+				var end_loc = legs[legs.length - 1].end_location;
+
+				start_point = start_loc;
+				end_point = end_loc;
+				start_pin.position = start_point;
+				end_pin.position = end_point;
+
+				// Extract waypoints from legs (end_location of all legs except the last one)
+				_waypoints = [];
+				// Clear existing waypoint markers
+				for (var k = 0; k < _waypoint_markers.length; k++) {
+					_waypoint_markers[k].map = null;
+				}
+				_waypoint_markers = [];
+
+				for (var i = 0; i < legs.length - 1; i++) {
+					var wp_loc = legs[i].end_location;
+					_waypoints.push({
+						location: wp_loc,
+						stopover: true
+					});
+
+					// Create Orange marker for waypoint
+					var wp_pin = new google.maps.marker.AdvancedMarkerElement({
+						position: wp_loc,
+						gmpDraggable: false, // Rely on underlying renderer for dragging
+						map: map,
+						content: new google.maps.marker.PinElement({
+							background: '#FF9800', // Orange
+							borderColor: '#EF6C00',
+							glyphColor: 'white',
+						}).element,
+					});
+					// Pass events to underlying marker
+					wp_pin.element.style.pointerEvents = 'none';
+					_waypoint_markers.push(wp_pin);
+				}
+
+				changeHash();
+				hyperlapse.generate({ route: result });
+			});
 
 			camera_pin = new google.maps.marker.AdvancedMarkerElement({
 				position: start_point,
@@ -123,7 +185,7 @@
 
 			start_pin = new google.maps.marker.AdvancedMarkerElement({
 				position: start_point,
-				gmpDraggable: true,
+				gmpDraggable: false, // Use DirectionsRenderer for dragging
 				map: map,
 				content: new google.maps.marker.PinElement({
 					background: '#4CAF50', // Green
@@ -131,22 +193,11 @@
 					glyphColor: 'white',
 				}).element,
 			});
-
-			start_pin.addEventListener('dragend', function (event) {
-				start_point = start_pin.position;
-				changeHash();
-				snapToRoad(start_pin.position, function(result) {
-					if (result) {
-						start_pin.position = result;
-						start_point = result;
-						changeHash();
-					}
-				});
-			});
+			start_pin.element.style.pointerEvents = 'none';
 
 			end_pin = new google.maps.marker.AdvancedMarkerElement({
 				position: end_point,
-				gmpDraggable: true,
+				gmpDraggable: false, // Use DirectionsRenderer for dragging
 				map: map,
 				content: new google.maps.marker.PinElement({
 					background: '#F44336', // Red
@@ -154,18 +205,7 @@
 					glyphColor: 'white',
 				}).element,
 			});
-
-			end_pin.addEventListener('dragend', function (event) {
-				end_point = end_pin.position;
-				changeHash();
-				snapToRoad(end_pin.position, function(result) {
-					if (result) {
-						end_pin.position = result;
-						end_point = result;
-						changeHash();
-					}
-				});
-			});
+			end_pin.element.style.pointerEvents = 'none';
 
 			pivot_pin = new google.maps.marker.AdvancedMarkerElement({
 				position: lookat_point,
@@ -182,6 +222,24 @@
 				hyperlapse.setLookat( pivot_pin.position );
 				changeHash();
 			});
+
+			// Draw initial waypoint markers if loaded from hash
+			if (_waypoints.length > 0) {
+				for (var i = 0; i < _waypoints.length; i++) {
+					var wp_pin = new google.maps.marker.AdvancedMarkerElement({
+						position: _waypoints[i].location,
+						gmpDraggable: false,
+						map: map,
+						content: new google.maps.marker.PinElement({
+							background: '#FF9800', // Orange
+							borderColor: '#EF6C00',
+							glyphColor: 'white',
+						}).element,
+					});
+					wp_pin.element.style.pointerEvents = 'none';
+					_waypoint_markers.push(wp_pin);
+				}
+			}
 
 			function findAddress(address) {
 				geocoder.geocode( { 'address': address}, function(results, status) {
@@ -344,6 +402,7 @@
 					var request = {
 						origin: start_point, 
 						destination: end_point, 
+						waypoints: _waypoints,
 						travelMode: google.maps.TravelMode.DRIVING
 					};
 
@@ -377,7 +436,14 @@
 						snapToRoad(c3, function(result3) {
 							end_pin.position = result3;
 							end_point = result3;
+							// Clear waypoints on new drop
+							_waypoints = [];
+							for (var k = 0; k < _waypoint_markers.length; k++) {
+								_waypoint_markers[k].map = null;
+							}
+							_waypoint_markers = [];
 							changeHash();
+							// o.generate(); // Let user generate manually? Or call it? Original didn't call generate.
 						});
 					});
 				}

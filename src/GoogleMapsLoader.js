@@ -23,7 +23,7 @@ export const loadGoogleMaps = (apiKey) => {
         const script = document.createElement('script');
         script.id = 'google-maps-script';
         script.type = 'text/javascript';
-        script.src = `https://maps.googleapis.com/maps/api/js?v=3.exp&key=${apiKey}&libraries=marker&loading=async&callback=initGoogleMapsCallback`;
+        script.src = `https://maps.googleapis.com/maps/api/js?v=3.exp&key=${apiKey}&libraries=marker,geometry&loading=async&callback=initGoogleMapsCallback`;
         script.onerror = reject;
 
         // Define global callback
