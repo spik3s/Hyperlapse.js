@@ -100,8 +100,12 @@ export class PanoLoader {
 
 		const request = {
 			location: location,
-			radius: 50
+			radius: this.parameters.radius || 50
 		};
+
+		if (this.parameters.source) {
+			request.source = this.parameters.source;
+		}
 
 		this.panoClient.getPanorama(request, (result, status) => {
 			if (status === google.maps.StreetViewStatus.OK) {

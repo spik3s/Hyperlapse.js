@@ -462,6 +462,8 @@
 				use_lookat:true,
 				screen_width: window.innerWidth,
 				screen_height: window.innerHeight,
+				radius: 15,
+				google_only: false,
 				generate:function(){
 					show( "Generating route..." );
 
@@ -597,6 +599,16 @@
 			var lookat_control = parameters.add(o, 'use_lookat')
 			lookat_control.onChange(function(value) {
 				hyperlapse.use_lookat = value;
+			});
+
+			var radius_control = parameters.add(o, 'radius', 5, 100);
+			radius_control.onChange(function(value) {
+				hyperlapse.setRadius(value);
+			});
+
+			var google_only_control = parameters.add(o, 'google_only');
+			google_only_control.onChange(function(value) {
+				hyperlapse.setSource(value ? google.maps.StreetViewSource.GOOGLE : google.maps.StreetViewSource.DEFAULT);
 			});
 
 			parameters.open();
