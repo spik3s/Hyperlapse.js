@@ -52,6 +52,7 @@
 		var _waypoint_markers = [];
 		var _waypoints = [];
 		var parts;
+		var ignore_directions_change = false;
 
 		function show(msg) {
 			document.getElementById("text").innerHTML = msg;
@@ -215,6 +216,9 @@
 				}
 
 				changeHash();
+
+				if (ignore_directions_change) return;
+
 				clearRouteMarkers();
 				hyperlapse.generate({ route: result });
 			});
@@ -371,7 +375,9 @@
 			};
 
 			hyperlapse.onRouteComplete = function(e) {
+				ignore_directions_change = true;
 				directions_renderer.setDirections(e.response);
+				ignore_directions_change = false;
 				show( "Number of Points: "+ hyperlapse.length() );
 				hyperlapse.load();
 			};
