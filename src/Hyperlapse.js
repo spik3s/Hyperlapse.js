@@ -662,6 +662,14 @@ export var Hyperlapse = function(container, params) {
 	};
 
 	/**
+	 * @param {Number} z
+	 */
+	this.setZoom = function(z) {
+		_zoom = z;
+		_loader.setZoom(_zoom);
+	};
+
+	/**
 	 * @param {Number} width
 	 * @param {Number} height
 	 */
@@ -679,6 +687,12 @@ export var Hyperlapse = function(container, params) {
 	this.reset = function() {
 		_raw_points.remove(0,-1);
 		_h_points.remove(0,-1);
+
+		if(_mesh.material.map) {
+			_mesh.material.map.dispose();
+			_mesh.material.map = new THREE.Texture();
+			_mesh.material.needsUpdate = true;
+		}
 
 		self.tilt = 0;
 
