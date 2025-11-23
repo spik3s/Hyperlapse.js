@@ -691,6 +691,7 @@ export var Hyperlapse = function(container, params) {
 		if(_mesh.material.map) {
 			_mesh.material.map.dispose();
 			_mesh.material.map = new THREE.Texture();
+			_mesh.material.needsUpdate = true;
 		}
 
 		self.tilt = 0;
