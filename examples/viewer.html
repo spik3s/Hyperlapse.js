@@ -159,6 +159,14 @@
 			});
 			directions_renderer.setMap(map);
 
+			function clearRouteMarkers() {
+				var marker;
+				while(_route_markers.length > 0) {
+					marker = _route_markers.pop();
+					marker.setMap(null);
+				}
+			}
+
 			directions_renderer.addListener('directions_changed', function() {
 				var result = directions_renderer.getDirections();
 				if (!result || !result.routes || !result.routes.length) return;
@@ -207,6 +215,7 @@
 				}
 
 				changeHash();
+				clearRouteMarkers();
 				hyperlapse.generate({ route: result });
 			});
 
@@ -222,7 +231,7 @@
 
 			start_pin = new google.maps.marker.AdvancedMarkerElement({
 				position: start_point,
-				gmpDraggable: false, // Use DirectionsRenderer for dragging
+				gmpDraggable: true,
 				map: map,
 				content: new google.maps.marker.PinElement({
 					background: '#4CAF50', // Green
@@ -230,11 +239,15 @@
 					glyphColor: 'white',
 				}).element,
 			});
-			start_pin.element.style.pointerEvents = 'none';
+
+			start_pin.addEventListener('dragend', function (event) {
+				start_point = start_pin.position;
+				o.generate();
+			});
 
 			end_pin = new google.maps.marker.AdvancedMarkerElement({
 				position: end_point,
-				gmpDraggable: false, // Use DirectionsRenderer for dragging
+				gmpDraggable: true,
 				map: map,
 				content: new google.maps.marker.PinElement({
 					background: '#F44336', // Red
@@ -242,7 +255,11 @@
 					glyphColor: 'white',
 				}).element,
 			});
-			end_pin.element.style.pointerEvents = 'none';
+
+			end_pin.addEventListener('dragend', function (event) {
+				end_point = end_pin.position;
+				o.generate();
+			});
 
 			pivot_pin = new google.maps.marker.AdvancedMarkerElement({
 				position: lookat_point,
@@ -323,19 +340,34 @@
 				show( "ERROR: "+ e.message );
 			};
 
+			function createYellowCircleElement() {
+				const el = document.createElement('div');
+				el.style.width = '10px';
+				el.style.height = '10px';
+				el.style.backgroundColor = '#FFEB3B'; // Yellow
+				el.style.border = '2px solid #FBC02D'; // Darker yellow border
+				el.style.borderRadius = '50%';
+				el.style.cursor = 'pointer';
+				return el;
+			}
+
 			hyperlapse.onRouteProgress = function(e) {
-				_route_markers.push( new google.maps.marker.AdvancedMarkerElement({
+				var marker = new google.maps.marker.AdvancedMarkerElement({
 					position: e.point.location,
-					gmpDraggable: false,
-					content: new google.maps.marker.PinElement({
-						background: '#FFEB3B', // Yellow
-						borderColor: '#FBC02D',
-						glyphColor: 'black',
-						scale: 0.5, // Make it smaller
-					}).element,
+					gmpDraggable: true,
+					content: createYellowCircleElement(),
 					map: map
-					})
-				);
+				});
+
+				marker.addEventListener('dragend', function (event) {
+					_waypoints.push({
+						location: marker.position,
+						stopover: true
+					});
+					o.generate();
+				});
+
+				_route_markers.push( marker );
 			};
 
 			hyperlapse.onRouteComplete = function(e) {
@@ -426,11 +458,7 @@
 				generate:function(){
 					show( "Generating route..." );
 
-					var marker;
-					while(_route_markers.length > 0) {
-						marker = _route_markers.pop();
-						marker.setMap(null);
-					}
+					clearRouteMarkers();
 
 					if(start_pin) start_point = start_pin.position;
 					if(end_pin) end_point = end_pin.position;
