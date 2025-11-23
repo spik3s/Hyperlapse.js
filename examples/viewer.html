@@ -38,6 +38,31 @@
 		#map_form {
 			margin-bottom: 10px;
 		}
+		#context-menu {
+			display: none;
+			position: absolute;
+			z-index: 1000;
+			background-color: white;
+			border: 1px solid #ccc;
+			border-radius: 4px;
+			box-shadow: 2px 2px 5px rgba(0,0,0,0.2);
+			padding: 5px 0;
+			min-width: 120px;
+		}
+		#context-menu ul {
+			list-style: none;
+			margin: 0;
+			padding: 0;
+		}
+		#context-menu li {
+			padding: 8px 12px;
+			cursor: pointer;
+			font-size: 14px;
+			color: #333;
+		}
+		#context-menu li:hover {
+			background-color: #f0f0f0;
+		}
 	</style>
 	<script type="module">
 		import * as dat from 'dat.gui';
@@ -356,12 +381,74 @@
 				return el;
 			}
 
+			// Context Menu logic
+			const contextMenu = document.getElementById('context-menu');
+			const skipItem = document.getElementById('menu-skip');
+			const includeItem = document.getElementById('menu-include');
+			let currentContextPoint = null;
+			let currentContextMarkerElement = null;
+
+			function showContextMenu(x, y, point, markerElement) {
+				currentContextPoint = point;
+				currentContextMarkerElement = markerElement;
+
+				if (point.is_skipped) {
+					skipItem.style.display = 'none';
+					includeItem.style.display = 'block';
+				} else {
+					skipItem.style.display = 'block';
+					includeItem.style.display = 'none';
+				}
+
+				contextMenu.style.left = x + 'px';
+				contextMenu.style.top = y + 'px';
+				contextMenu.style.display = 'block';
+			}
+
+			function hideContextMenu() {
+				contextMenu.style.display = 'none';
+				currentContextPoint = null;
+				currentContextMarkerElement = null;
+			}
+
+			document.addEventListener('click', hideContextMenu);
+
+			// Prevent context menu from closing when clicking inside it
+			contextMenu.addEventListener('click', (e) => e.stopPropagation());
+
+			skipItem.addEventListener('click', () => {
+				if (currentContextPoint && currentContextMarkerElement) {
+					currentContextPoint.is_skipped = true;
+					currentContextMarkerElement.style.backgroundColor = '#9E9E9E'; // Gray
+					currentContextMarkerElement.style.borderColor = '#616161';
+				}
+				hideContextMenu();
+			});
+
+			includeItem.addEventListener('click', () => {
+				if (currentContextPoint && currentContextMarkerElement) {
+					currentContextPoint.is_skipped = false;
+					currentContextMarkerElement.style.backgroundColor = '#FFEB3B'; // Yellow
+					currentContextMarkerElement.style.borderColor = '#FBC02D';
+				}
+				hideContextMenu();
+			});
+
+
 			hyperlapse.onRouteProgress = function(e) {
+				const el = createYellowCircleElement();
 				var marker = new google.maps.marker.AdvancedMarkerElement({
 					position: e.point.location,
 					gmpDraggable: true,
-					content: createYellowCircleElement(),
+					content: el,
 					map: map
+				});
+
+				// Attach context menu listener to the marker element
+				el.addEventListener('contextmenu', function(event) {
+					event.preventDefault();
+					event.stopPropagation();
+					showContextMenu(event.clientX, event.clientY, e.point, el);
 				});
 
 				marker.addEventListener('dragend', function (event) {
@@ -702,6 +789,11 @@
 		<div id="text"></div>
 	</div>
 	
-	
+	<div id="context-menu">
+		<ul>
+			<li id="menu-skip">Skip the frame</li>
+			<li id="menu-include">Include frame</li>
+		</ul>
+	</div>
 </body> 
 </html>
