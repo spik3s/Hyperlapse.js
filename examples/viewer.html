@@ -465,6 +465,7 @@
 				radius: 15,
 				google_only: false,
 				preference: 'nearest',
+				buffer_size: 10,
 				generate:function(){
 					show( "Generating route..." );
 
@@ -619,6 +620,11 @@
 			var preference_control = parameters.add(o, 'preference', ['nearest', 'best']);
 			preference_control.onChange(function(value) {
 				hyperlapse.setPreference(value === 'best' ? google.maps.StreetViewPreference.BEST : google.maps.StreetViewPreference.NEAREST);
+			});
+
+			var buffer_control = parameters.add(o, 'buffer_size', 5, 50).step(1);
+			buffer_control.onChange(function(value) {
+				hyperlapse.buffer_size = value;
 			});
 
 			parameters.open();
