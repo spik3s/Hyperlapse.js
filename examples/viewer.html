@@ -464,6 +464,7 @@
 				screen_height: window.innerHeight,
 				radius: 15,
 				google_only: false,
+				preference: 'nearest',
 				generate:function(){
 					show( "Generating route..." );
 
@@ -609,6 +610,11 @@
 			var google_only_control = parameters.add(o, 'google_only');
 			google_only_control.onChange(function(value) {
 				hyperlapse.setSource(value ? google.maps.StreetViewSource.GOOGLE : google.maps.StreetViewSource.DEFAULT);
+			});
+
+			var preference_control = parameters.add(o, 'preference', ['nearest', 'best']);
+			preference_control.onChange(function(value) {
+				hyperlapse.setPreference(value === 'best' ? google.maps.StreetViewPreference.BEST : google.maps.StreetViewPreference.NEAREST);
 			});
 
 			parameters.open();

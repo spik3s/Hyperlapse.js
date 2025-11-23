@@ -107,6 +107,10 @@ export class PanoLoader {
 			request.source = this.parameters.source;
 		}
 
+		if (this.parameters.preference) {
+			request.preference = this.parameters.preference;
+		}
+
 		this.panoClient.getPanorama(request, (result, status) => {
 			if (status === google.maps.StreetViewStatus.OK) {
 				if (this.onPanoramaData) this.onPanoramaData(result);

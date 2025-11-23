@@ -99,12 +99,14 @@ export class Hyperlapse {
 
 		this.radius = this.params.radius || 15;
 		this.source = this.params.source;
+		this.preference = this.params.preference;
 
 		this.loader = new GSVPANO.PanoLoader({
 			zoom: this.zoom,
 			apiKey: this.params.apiKey,
 			radius: this.radius,
-			source: this.source
+			source: this.source,
+			preference: this.preference
 		});
 		this.loader.onError = (message) => this.handleError({ message });
 		this.loader.onPanoramaLoad = () => this.handlePanoramaLoad();
@@ -518,6 +520,11 @@ export class Hyperlapse {
 	setSource(source) {
 		this.source = source;
 		this.loader.parameters.source = source;
+	}
+
+	setPreference(preference) {
+		this.preference = preference;
+		this.loader.parameters.preference = preference;
 	}
 
 	setSize(width, height) {
