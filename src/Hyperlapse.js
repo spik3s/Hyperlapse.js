@@ -7,791 +7,562 @@
 import * as THREE from 'three';
 import { GSVPANO } from './GSVPano.js';
 
-Number.prototype.toRad = function() {
-	return this * Math.PI / 180;
+const toRad = (val) => val * Math.PI / 180;
+const toDeg = (val) => val * 180 / Math.PI;
+
+const pointOnLine = (t, a, b) => {
+	const lat1 = toRad(a.lat());
+	const lon1 = toRad(a.lng());
+	const lat2 = toRad(b.lat());
+	const lon2 = toRad(b.lng());
+
+	const x = lat1 + t * (lat2 - lat1);
+	const y = lon1 + t * (lon2 - lon1);
+
+	return new google.maps.LatLng(toDeg(x), toDeg(y));
 };
 
-Number.prototype.toDeg = function() {
-	return this * 180 / Math.PI;
-};
+class HyperlapsePoint {
+	constructor(location, pano_id, params = {}) {
+		this.location = location;
+		this.pano_id = pano_id;
+		this.heading = params.heading || 0;
+		this.pitch = params.pitch || 0;
+		this.elevation = params.elevation || 0;
+		this.image = params.image || null;
+		this.copyright = params.copyright || "© 2013 Google";
+		this.image_date = params.image_date || "";
+	}
+}
 
-// Array Remove - By John Resig (MIT Licensed)
-Array.prototype.remove = function(from, to) {
-  var rest = this.slice((to || from) + 1 || this.length);
-  this.length = from < 0 ? this.length + from : from;
-  return this.push.apply(this, rest);
-};
+export class Hyperlapse {
+	constructor(container, params = {}) {
+		this.container = container;
+		this.params = params;
+		this.w = this.params.width || 800;
+		this.h = this.params.height || 400;
+		this.d = 20;
+		this.use_elevation = this.params.use_elevation || false;
+		this.distance_between_points = this.params.distance_between_points || 5;
+		this.max_points = this.params.max_points || 100;
+		this.fovValue = this.params.fov || 70;
+		this.zoom = this.params.zoom || 1;
+		this.lat = 0;
+		this.lon = 0;
+		this.position = { x: 0, y: 0 };
+		this.offset = { x: 0, y: 0, z: 0 };
+		this.tilt = this.params.tilt || 0;
+		this.millis = this.params.millis || 50;
+		this.elevation_offset = this.params.elevation || 0;
+		this.use_lookat = this.params.use_lookat || false;
+		this.lookat = this.params.lookat || null;
+		this.use_rotation_comp = false;
+		this.rotation_comp = 0;
 
-var pointOnLine = function(t, a, b) {
-	var lat1 = a.lat().toRad(), lon1 = a.lng().toRad();
-	var lat2 = b.lat().toRad(), lon2 = b.lng().toRad();
+		this.isPlaying = false;
+		this.isLoading = false;
 
-	var x = lat1 + t * (lat2 - lat1);
-	var y = lon1 + t * (lon2 - lon1);
+		this.point_index = 0;
+		this.origin_heading = 0;
+		this.origin_pitch = 0;
+		this.forward = true;
+		this.lookat_heading = 0;
+		this.lookat_elevation = 0;
+		this.position_y = 0; // internal pitch for camera
 
-	return new google.maps.LatLng(x.toDeg(), y.toDeg());
-};
+		this.target = new THREE.Vector3(0, 0, 0);
+		this.cancel_load = false;
 
-/**
- * @class
- * @classdesc Value object for a single point in a Hyperlapse sequence.
- * @constructor
- * @param {google.maps.LatLng} location
- * @param {String} pano_id
- * @param {Object} params
- * @param {Number} [params.heading=0]
- * @param {Number} [params.pitch=0]
- * @param {Number} [params.elevation=0]
- * @param {Image} [params.image=null]
- * @param {String} [params.copyright="© 2013 Google"]
- * @param {String} [params.image_date=""]
- */
-var HyperlapsePoint = function(location, pano_id, params ) {
+		this.prev_pano_id = null;
+		this.raw_points = [];
+		this.h_points = [];
+		this.dtime = 0;
+		this.lastTimestamp = 0;
+		this.animationFrameId = null;
 
-	var self = this;
-	var params = params || {};
+		// Event handlers
+		this.onError = null;
+		this.onFrame = null;
+		this.onPlay = null;
+		this.onPause = null;
+		this.onLoadCanceled = null;
+		this.onLoadProgress = null;
+		this.onLoadComplete = null;
+		this.onRouteProgress = null;
+		this.onRouteComplete = null;
 
-	/**
-	 * @type {google.maps.LatLng}
-	 */
-	this.location = location;
+		this.elevator = new google.maps.ElevationService();
+		this.streetview_service = new google.maps.StreetViewService();
 
-	/**
-	 * @type {Number}
-	 */
-	this.pano_id = pano_id;
+		this.initThreeJS();
 
-	/**
-	 * @default 0
-	 * @type {Number}
-	 */
-	this.heading = params.heading || 0;
+		this.loader = new GSVPANO.PanoLoader({ zoom: this.zoom, apiKey: this.params.apiKey });
+		this.loader.onError = (message) => this.handleError({ message });
+		this.loader.onPanoramaLoad = () => this.handlePanoramaLoad();
+	}
 
-	/**
-	 * @default 0
-	 * @type {Number}
-	 */
-	this.pitch = params.pitch || 0;
+	initThreeJS() {
+		this.canvas = document.createElement('canvas');
+		this.context = this.canvas.getContext('2d');
 
-	/**
-	 * @default 0
-	 * @type {Number}
-	 */
-	this.elevation = params.elevation || 0;
+		this.camera = new THREE.PerspectiveCamera(this.fovValue, this.w / this.h, 1, 1100);
 
-	/**
-	 * @type {Image}
-	 */
-	this.image = params.image || null;
+		this.scene = new THREE.Scene();
+		this.scene.add(this.camera);
 
-	/**
-	 * @default "© 2013 Google"
-	 * @type {String}
-	 */
-	this.copyright = params.copyright || "© 2013 Google";
+		this.renderer = new THREE.WebGLRenderer();
+		this.renderer.autoClear = false;
+		this.renderer.setSize(this.w, this.h);
 
-	/**
-	 * @type {String}
-	 */
-	this.image_date = params.image_date || "";
+		const geometry = new THREE.SphereGeometry(500, 60, 40);
+		// Invert geometry to view from inside
+		geometry.scale(-1, 1, 1);
 
-};
+		this.mesh = new THREE.Mesh(
+			geometry,
+			new THREE.MeshBasicMaterial({ map: new THREE.Texture(), side: THREE.DoubleSide })
+		);
+		this.scene.add(this.mesh);
 
-/**
- * @class
- * @constructor
- * @param {Node} container - HTML element
- * @param {Object} params
- * @param {Number} [params.width=800]
- * @param {Number} [params.height=400]
- * @param {boolean} [params.use_elevation=false]
- * @param {Number} [params.distance_between_points=5]
- * @param {Number} [params.max_points=100]
- * @param {Number} [params.fov=70]
- * @param {Number} [params.zoom=1]
- * @param {google.maps.LatLng} [params.lookat=null]
- * @param {Number} [params.millis=50]
- * @param {Number} [params.elevation=0]
- * @param {Number} [params.tilt=0]
- */
-export var Hyperlapse = function(container, params) {
+		this.container.appendChild(this.renderer.domElement);
+	}
 
-	"use strict";
+	handleError(e) {
+		if (this.onError) this.onError(e);
+	}
 
-	var self = this,
-		_listeners = [],
-		_container = container,
-		_params = params || {},
-		_w = _params.width || 800,
-		_h = _params.height || 400,
-		_d = 20,
-		_use_elevation = _params.use_elevation || false,
-		_distance_between_points = _params.distance_between_points || 5,
-		_max_points = _params.max_points || 100,
-		_fov = _params.fov || 70,
-		_zoom = _params.zoom || 1,
-		_lat = 0, _lon = 0,
-		_position_x = 0, _position_y = 0,
-		_is_playing = false, _is_loading = false,
-		_point_index = 0,
-		_origin_heading = 0, _origin_pitch = 0,
-		_forward = true,
-		_lookat_heading = 0, _lookat_elevation = 0,
-		_canvas, _context,
-		_camera, _scene, _renderer, _mesh,
-		_target = new THREE.Vector3( 0, 0, 0 ),
-		_loader, _cancel_load = false,
-		_ctime = Date.now(),
-		_ptime = 0, _dtime = 0,
-		_prev_pano_id = null,
-		_raw_points = [], _h_points = [];
+	handleFrame(e) {
+		if (this.onFrame) this.onFrame(e);
+	}
 
-	/**
-	 * @event Hyperlapse#onError
- 	 * @param {Object} e
- 	 * @param {String} e.message
-	 */
-	var handleError = function (e) { if (self.onError) self.onError(e); };
+	handlePlay(e) {
+		if (this.onPlay) this.onPlay(e);
+	}
 
-	/**
-	 * @event Hyperlapse#onFrame
-	 * @param {Object} e
- 	 * @param {Number} e.position
- 	 * @param {HyperlapsePoint} e.point
-	 */
-	var handleFrame = function (e) { if (self.onFrame) self.onFrame(e); };
+	handlePause(e) {
+		if (this.onPause) this.onPause(e);
+	}
 
-	/**
-	 * @event Hyperlapse#onPlay
-	 */
-	var handlePlay = function (e) { if (self.onPlay) self.onPlay(e); };
+	handleLoadCanceled(e) {
+		this.cancel_load = false;
+		this.isLoading = false;
+		if (this.onLoadCanceled) this.onLoadCanceled(e);
+	}
 
-	/**
-	 * @event Hyperlapse#onPause
-	 */
-	var handlePause = function (e) { if (self.onPause) self.onPause(e); };
+	handleLoadProgress(e) {
+		if (this.onLoadProgress) this.onLoadProgress(e);
+	}
 
-	var _elevator = new google.maps.ElevationService();
-	var _streetview_service = new google.maps.StreetViewService();
+	handleLoadComplete(e) {
+		this.isLoading = false;
+		this.point_index = 0;
 
-	_canvas = document.createElement( 'canvas' );
-	_context = _canvas.getContext( '2d' );
+		this.animate(0);
 
-	_camera = new THREE.PerspectiveCamera( _fov, _w/_h, 1, 1100 );
-	// _camera.target = new THREE.Vector3( 0, 0, 0 ); // Removed in newer Three.js
+		if (this.onLoadComplete) this.onLoadComplete(e);
+	}
 
-	_scene = new THREE.Scene();
-	_scene.add( _camera );
+	handleRouteProgress(e) {
+		if (this.onRouteProgress) this.onRouteProgress(e);
+	}
 
-	// WebGL detection simplified or removed as modern browsers support it
+	handleRouteComplete(e) {
+		const elevations = this.h_points.map(p => p.location);
 
-	_renderer = new THREE.WebGLRenderer();
-	_renderer.autoClear = false; // autoClearColor is deprecated
-	_renderer.setSize( _w, _h );
-
-	var _geometry = new THREE.SphereGeometry( 500, 60, 40 );
-	// Invert geometry to view from inside
-	_geometry.scale(-1, 1, 1);
-
-	_mesh = new THREE.Mesh( 
-		_geometry,
-		new THREE.MeshBasicMaterial( { map: new THREE.Texture(), side: THREE.DoubleSide } ) 
-	);
-	_scene.add( _mesh );
-
-	_container.appendChild( _renderer.domElement );
-
-	_loader = new GSVPANO.PanoLoader( {zoom: _zoom, apiKey: _params.apiKey} );
-	_loader.onError = function(message) {
-		handleError({message:message});
-	};
-
-	_loader.onPanoramaLoad = function() {
-		var canvas = document.createElement("canvas");
-		var context = canvas.getContext('2d');
-		canvas.setAttribute('width',this.canvas.width);
-		canvas.setAttribute('height',this.canvas.height);
-		context.drawImage(this.canvas, 0, 0);
-
-		_h_points[_point_index].image = canvas;
-
-		if(++_point_index != _h_points.length) {
-			handleLoadProgress( {position:_point_index} );
-
-			if(!_cancel_load) {
-				_loader.composePanorama( _h_points[_point_index].pano_id );
-			} else {
-				handleLoadCanceled( {} );
-			}
-		} else {
-			handleLoadComplete( {} );
-		}
-	};
-
-	/**
-	 * @event Hyperlapse#onLoadCanceled
-	 */
-	var handleLoadCanceled = function (e) {
-		_cancel_load = false;
-		_is_loading = false;
-
-		if (self.onLoadCanceled) self.onLoadCanceled(e);
-	};
-
-	/**
-	 * @event Hyperlapse#onLoadProgress
-	 * @param {Object} e
- 	 * @param {Number} e.position
-	 */
-	var handleLoadProgress = function (e) { if (self.onLoadProgress) self.onLoadProgress(e); };
-	
-	/**
-	 * @event Hyperlapse#onLoadComplete
-	 */
-	var handleLoadComplete = function (e) {
-		_is_loading = false;
-		_point_index = 0;
-
-		animate();
-
-		if (self.onLoadComplete) self.onLoadComplete(e);
-	};
-
-	/**
-	 * @event Hyperlapse#onRouteProgress
-	 * @param {Object} e
- 	 * @param {HyperlapsePoint} e.point
-	 */
-	var handleRouteProgress = function (e) { if (self.onRouteProgress) self.onRouteProgress(e); };
-
-	/**
-	 * @event Hyperlapse#onRouteComplete
-	 * @param {Object} e
-	 * @param {google.maps.DirectionsResult} e.response
- 	 * @param {Array<HyperlapsePoint>} e.points
-	 */
-	var handleRouteComplete = function (e) {
-		var elevations = [];
-		for(var i=0; i<_h_points.length; i++) {
-			elevations[i] = _h_points[i].location;
-		}
-
-		if(_use_elevation) {
-			getElevation(elevations, function(results){
-				if(results) {
-					for(i=0; i<_h_points.length; i++) {
-						_h_points[i].elevation = results[i].elevation;
+		if (this.use_elevation) {
+			this.getElevation(elevations, (results) => {
+				if (results) {
+					for (let i = 0; i < this.h_points.length; i++) {
+						this.h_points[i].elevation = results[i].elevation;
 					}
 				} else {
-					for(i=0; i<_h_points.length; i++) {
-						_h_points[i].elevation = -1;
+					for (let i = 0; i < this.h_points.length; i++) {
+						this.h_points[i].elevation = -1;
 					}
 				}
 				
-				self.setLookat(self.lookat, true, function(){
-					if (self.onRouteComplete) self.onRouteComplete(e);
+				this.setLookat(this.lookat, true, () => {
+					if (this.onRouteComplete) this.onRouteComplete(e);
 				});
 			});
 		} else {
-			for(i=0; i<_h_points.length; i++) {
-				_h_points[i].elevation = -1;
+			for (let i = 0; i < this.h_points.length; i++) {
+				this.h_points[i].elevation = -1;
 			}
 
-			self.setLookat(self.lookat, false, function(){
-				if (self.onRouteComplete) self.onRouteComplete(e);
+			this.setLookat(this.lookat, false, () => {
+				if (this.onRouteComplete) this.onRouteComplete(e);
 			});
 		}
+	}
 
-		
-	};
+	handlePanoramaLoad() {
+		const canvas = document.createElement("canvas");
+		const context = canvas.getContext('2d');
+		canvas.setAttribute('width', this.loader.canvas.width);
+		canvas.setAttribute('height', this.loader.canvas.height);
+		context.drawImage(this.loader.canvas, 0, 0);
 
-	var parsePoints = function(response) {
+		this.h_points[this.point_index].image = canvas;
 
-		_loader.load( _raw_points[_point_index], function() {
+		if (++this.point_index !== this.h_points.length) {
+			this.handleLoadProgress({ position: this.point_index });
 
-			if(_loader.id != _prev_pano_id) {
-				_prev_pano_id = _loader.id;
+			if (!this.cancel_load) {
+				this.loader.composePanorama(this.h_points[this.point_index].pano_id);
+			} else {
+				this.handleLoadCanceled({});
+			}
+		} else {
+			this.handleLoadComplete({});
+		}
+	}
 
-				var hp = new HyperlapsePoint( _loader.location, _loader.id, {
-					heading:_loader.rotation, 
-					pitch: _loader.pitch, 
-					elevation: _loader.elevation,
-					copyright: _loader.copyright,
-					image_date: _loader.image_date
-				} );
+	parsePoints(response) {
+		this.loader.load(this.raw_points[this.point_index], () => {
+			if (this.loader.id !== this.prev_pano_id) {
+				this.prev_pano_id = this.loader.id;
 
-				_h_points.push( hp );
+				const hp = new HyperlapsePoint(this.loader.location, this.loader.id, {
+					heading: this.loader.rotation,
+					pitch: this.loader.pitch,
+					elevation: this.loader.elevation,
+					copyright: this.loader.copyright,
+					image_date: this.loader.image_date
+				});
 
-				handleRouteProgress( {point: hp} );
+				this.h_points.push(hp);
 
-				if(_point_index == _raw_points.length-1) {
-					handleRouteComplete( {response: response, points: _h_points} );
+				this.handleRouteProgress({ point: hp });
+
+				if (this.point_index === this.raw_points.length - 1) {
+					this.handleRouteComplete({ response: response, points: this.h_points });
 				} else {
-					_point_index++;
-					if(!_cancel_load) parsePoints(response);
-					else handleLoadCanceled( {} );
+					this.point_index++;
+					if (!this.cancel_load) this.parsePoints(response);
+					else this.handleLoadCanceled({});
 				}
 			} else {
+				this.raw_points.splice(this.point_index, 1);
 
-				_raw_points.splice(_point_index, 1);
-
-				if(_point_index == _raw_points.length) {
-					handleRouteComplete( {response: response, points: _h_points} ); // FIX
+				if (this.point_index === this.raw_points.length) {
+					this.handleRouteComplete({ response: response, points: this.h_points });
 				} else {
-					if(!_cancel_load) parsePoints(response);
-					else handleLoadCanceled( {} );
+					if (!this.cancel_load) this.parsePoints(response);
+					else this.handleLoadCanceled({});
 				}
-
 			}
+		});
+	}
 
-		} );
-	};
+	getElevation(locations, callback) {
+		const positionalRequest = { locations: locations };
 
-	var getElevation = function(locations, callback) {
-		var positionalRequest = { locations: locations };
-
-		_elevator.getElevationForLocations(positionalRequest, function(results, status) {
-			if (status == google.maps.ElevationStatus.OK) {
+		this.elevator.getElevationForLocations(positionalRequest, (results, status) => {
+			if (status === google.maps.ElevationStatus.OK) {
 				callback(results);
 			} else {
-				if(status == google.maps.ElevationStatus.OVER_QUERY_LIMIT) {
+				if (status === google.maps.ElevationStatus.OVER_QUERY_LIMIT) {
 					console.log("Over elevation query limit.");
 				}
-				_use_elevation = false;
+				this.use_elevation = false;
 				callback(null);
 			}
 		});
-	};
+	}
 
-	var handleDirectionsRoute = function(response) {
-		if(!_is_playing) {
+	handleDirectionsRoute(response) {
+		if (!this.isPlaying) {
+			const route = response.routes[0];
+			const path = route.overview_path;
+			const legs = route.legs;
 
-			var route = response.routes[0];
-			var path = route.overview_path;
-			var legs = route.legs;
-
-			var total_distance = 0;
-			for(var i=0; i<legs.length; ++i) {
+			let total_distance = 0;
+			for (let i = 0; i < legs.length; ++i) {
 				total_distance += legs[i].distance.value;
 			}
 
-			var segment_length = total_distance/_max_points;
-			_d = (segment_length < _distance_between_points) ? _d = _distance_between_points : _d = segment_length;
+			const segment_length = total_distance / this.max_points;
+			this.d = (segment_length < this.distance_between_points) ? this.distance_between_points : segment_length;
 
-			var d = 0;
-			var r = 0;
-			var a, b;
+			let d = 0;
+			let r = 0;
+			let a, b;
 
-			for(i=0; i<path.length; i++) {
-				if(i+1 < path.length) {
-
+			for (let i = 0; i < path.length; i++) {
+				if (i + 1 < path.length) {
 					a = path[i];
-					b = path[i+1];
+					b = path[i + 1];
 					d = google.maps.geometry.spherical.computeDistanceBetween(a, b);
 
-					if(r > 0 && r < d) {
-						a = pointOnLine(r/d, a, b);
+					if (r > 0 && r < d) {
+						a = pointOnLine(r / d, a, b);
 						d = google.maps.geometry.spherical.computeDistanceBetween(a, b);
-						_raw_points.push(a);
-
+						this.raw_points.push(a);
 						r = 0;
-					} else if(r > 0 && r > d) {
+					} else if (r > 0 && r > d) {
 						r -= d;
 					}
 
-					if(r === 0) {
-						var segs = Math.floor(d/_d);
+					if (r === 0) {
+						const segs = Math.floor(d / this.d);
 
-						if(segs > 0) {
-							for(var j=0; j<segs; j++) {
-								var t = j/segs;
-
-								if( t>0 || (t+i)===0  ) { // not start point
-									var way = pointOnLine(t, a, b);
-									_raw_points.push(way);
+						if (segs > 0) {
+							for (let j = 0; j < segs; j++) {
+								const t = j / segs;
+								if (t > 0 || (t + i) === 0) { // not start point
+									const way = pointOnLine(t, a, b);
+									this.raw_points.push(way);
 								}
 							}
-
-							r = d-(_d*segs);
+							r = d - (this.d * segs);
 						} else {
-							r = _d*( 1-(d/_d) );
+							r = this.d * (1 - (d / this.d));
 						}
 					}
-
 				} else {
-					_raw_points.push(path[i]);
+					this.raw_points.push(path[i]);
 				}
 			}
-
-			parsePoints(response);
-
+			this.parsePoints(response);
 		} else {
-			self.pause();
-			handleDirectionsRoute(response);
+			this.pause();
+			this.handleDirectionsRoute(response);
 		}
-	};
+	}
 
-	var drawMaterial = function() {
-		_mesh.material.map.image = _h_points[_point_index].image;
-		_mesh.material.map.needsUpdate = true;
+	drawMaterial() {
+		this.mesh.material.map.image = this.h_points[this.point_index].image;
+		this.mesh.material.map.needsUpdate = true;
 
-		// In newer three.js, we need to invalidate the texture if we change the image
-		// But map.needsUpdate = true handles it.
+		this.origin_heading = this.h_points[this.point_index].heading;
+		this.origin_pitch = this.h_points[this.point_index].pitch;
 
-		_origin_heading = _h_points[_point_index].heading;
-		_origin_pitch = _h_points[_point_index].pitch;
+		if (this.use_lookat && this.lookat)
+			this.lookat_heading = google.maps.geometry.spherical.computeHeading(this.h_points[this.point_index].location, this.lookat);
 
-		if(self.use_lookat) 
-			_lookat_heading = google.maps.geometry.spherical.computeHeading( _h_points[_point_index].location, self.lookat );
+		if (this.h_points[this.point_index].elevation !== -1) {
+			const e = this.h_points[this.point_index].elevation - this.elevation_offset;
+			const d = google.maps.geometry.spherical.computeDistanceBetween(this.h_points[this.point_index].location, this.lookat);
+			const dif = this.lookat_elevation - e;
+			const angle = toDeg(Math.atan(Math.abs(dif) / d));
+			this.position_y = (dif < 0) ? -angle : angle;
+		}
 
-		if(_h_points[_point_index].elevation != -1 ) {
-			var e = _h_points[_point_index].elevation - self.elevation_offset;
-			var d = google.maps.geometry.spherical.computeDistanceBetween( _h_points[_point_index].location, self.lookat );
-			var dif = _lookat_elevation - e;
-			var angle = Math.atan( Math.abs(dif)/d ).toDeg();
-			_position_y = (dif<0) ? -angle : angle;
-		} 
-
-		handleFrame({
-			position:_point_index,
-			point: _h_points[_point_index]
+		this.handleFrame({
+			position: this.point_index,
+			point: this.h_points[this.point_index]
 		});
-	};
+	}
 
-	var render = function() {
-		if(!_is_loading && self.length()>0) {
-			var t = _point_index/(self.length());
+	render() {
+		if (!this.isLoading && this.length() > 0) {
+			const t = this.point_index / (this.length());
 
-			var o_x = self.position.x + (self.offset.x * t);
-			var o_y = self.position.y + (self.offset.y * t);
-			var o_z = self.tilt + (self.offset.z.toRad() * t);
+			const o_x = this.position.x + (this.offset.x * t);
+			const o_y = this.position.y + (this.offset.y * t);
+			const o_z = this.tilt + (toRad(this.offset.z) * t);
 
-			var o_heading = (self.use_lookat) ? _lookat_heading - _origin_heading.toDeg() + o_x : o_x;
-			var o_pitch = _position_y + o_y;
+			const o_heading = (this.use_lookat) ? this.lookat_heading - toDeg(this.origin_heading) + o_x : o_x;
+			const o_pitch = this.position_y + o_y;
 
-			var olon = _lon, olat = _lat;
-			_lon = _lon + ( o_heading - olon );
-			_lat = _lat + ( o_pitch - olat );
+			const olon = this.lon, olat = this.lat;
+			this.lon = this.lon + (o_heading - olon);
+			this.lat = this.lat + (o_pitch - olat);
 
-			_lat = Math.max( - 85, Math.min( 85, _lat ) );
-			var phi = ( 90 - _lat ).toRad();
-			var theta = _lon.toRad();
+			this.lat = Math.max(-85, Math.min(85, this.lat));
+			const phi = toRad(90 - this.lat);
+			const theta = toRad(this.lon);
 
-			_target.x = 500 * Math.sin( phi ) * Math.cos( theta );
-			_target.y = 500 * Math.cos( phi );
-			_target.z = 500 * Math.sin( phi ) * Math.sin( theta );
-			_camera.lookAt( _target );
-			_camera.rotation.z -= o_z;
+			this.target.x = 500 * Math.sin(phi) * Math.cos(theta);
+			this.target.y = 500 * Math.cos(phi);
+			this.target.z = 500 * Math.sin(phi) * Math.sin(theta);
+			this.camera.lookAt(this.target);
+			this.camera.rotation.z -= o_z;
 
-			if(self.use_rotation_comp) {
-				_camera.rotation.z -= self.rotation_comp.toRad();
+			if (this.use_rotation_comp) {
+				this.camera.rotation.z -= toRad(this.rotation_comp);
 			}
-			_mesh.rotation.z = _origin_pitch.toRad();
-			_renderer.render( _scene, _camera );
+			this.mesh.rotation.z = toRad(this.origin_pitch);
+			this.renderer.render(this.scene, this.camera);
 		}
-	};
+	}
 
-	var animate = function() {
-		var ptime = _ctime;
-		_ctime = Date.now();
-		_dtime += _ctime - ptime;
-		if(_dtime >= self.millis) {
-			if(_is_playing) loop();
-			_dtime = 0;
+	animate(timestamp) {
+		if (!this.lastTimestamp) this.lastTimestamp = timestamp;
+		const deltaTime = timestamp - this.lastTimestamp;
+		this.lastTimestamp = timestamp;
+
+		this.dtime += deltaTime;
+		if (this.dtime >= this.millis) {
+			if (this.isPlaying) this.loop();
+			this.dtime = 0;
 		}
 
-		requestAnimationFrame( animate );
-		render();
-	};
+		this.animationFrameId = requestAnimationFrame((t) => this.animate(t));
+		this.render();
+	}
 
-	// animates the playhead forward or backward depending on direction
-	var loop = function() {
-		drawMaterial();
+	loop() {
+		this.drawMaterial();
 
-		if(_forward) {
-			if(++_point_index == _h_points.length) {
-				_point_index = _h_points.length-1;
-				_forward = !_forward;
+		if (this.forward) {
+			if (++this.point_index === this.h_points.length) {
+				this.point_index = this.h_points.length - 1;
+				this.forward = !this.forward;
 			}
 		} else {
-			if(--_point_index == -1) {
-				_point_index = 0;
-				_forward = !_forward;
+			if (--this.point_index === -1) {
+				this.point_index = 0;
+				this.forward = !this.forward;
 			}
 		}
-	};
+	}
 
+	// Public methods
 
-	/**
-	 * @type {google.maps.LatLng}
-	 */
-	this.lookat = _params.lookat || null;
+	length() {
+		return this.h_points.length;
+	}
 
-	/**
-	 * @default 50
-	 * @type {Number}
-	 */
-	this.millis = _params.millis || 50;
+	setPitch(v) {
+		this.position_y = v;
+	}
 
-	/**
-	 * @default 0
-	 * @type {Number}
-	 */
-	this.elevation_offset = _params.elevation || 0;
+	setDistanceBetweenPoint(v) {
+		this.distance_between_points = v;
+	}
 
-	/**
-	 * @deprecated should use offset instead
-	 * @default 0
-	 * @type {Number}
-	 */
-	this.tilt = _params.tilt || 0;
+	setMaxPoints(v) {
+		this.max_points = v;
+	}
 
-	/**
-	 * @default {x:0, y:0}
-	 * @type {Object}
-	 */
-	this.position = {x:0, y:0};
+	fov() {
+		return this.fovValue;
+	}
 
-	/**
-	 * @default {x:0, y:0, z:0}
-	 * @type {Object}
-	 */
-	this.offset = {x:0, y:0, z:0};
+	webgl() {
+		return this.renderer;
+	}
 
-	/**
-	 * @default false
-	 * @type {boolean}
-	 */
-	this.use_lookat = _params.use_lookat || false;
+	getCurrentImage() {
+		return this.h_points[this.point_index].image;
+	}
 
-	/**
-	 * @default false
-	 * @type {boolean}
-	 */
-	this.use_rotation_comp = false;
+	getCurrentPoint() {
+		return this.h_points[this.point_index];
+	}
 
-	/**
-	 * @default 0
-	 * @type {Number}
-	 */
-	this.rotation_comp = 0;
+	setLookat(point, call_service, callback) {
+		this.lookat = point;
 
-	/**
-	 * @returns {boolean}
-	 */
-	this.isPlaying = function() { return _is_playing; };
-
-	/**
-	 * @returns {boolean}
-	 */
-	this.isLoading = function() { return _is_loading; };
-
-	/**
-	 * @returns {Number}
-	 */
-	this.length = function() { return _h_points.length; };
-
-	/**
-	 * @param {Number} v
-	 */
-	this.setPitch = function(v) { _position_y = v; };
-
-	/**
-	 * @param {Number} v
-	 */
-	this.setDistanceBetweenPoint = function(v) { _distance_between_points = v; };
-
-	/**
-	 * @param {Number} v
-	 */
-	this.setMaxPoints = function(v) { _max_points = v; };
-
-	/**
-	 * @returns {Number}
-	 */
-	this.fov = function() { return _fov; };
-
-	/**
-	 * @returns {THREE.WebGLRenderer}
-	 */
-	this.webgl = function() { return _renderer; };
-
-	/**
-	 * @returns {Image}
-	 */
-	this.getCurrentImage = function() {
-		return _h_points[_point_index].image; 
-	};
-
-	/**
-	 * @returns {HyperlapsePoint}
-	 */
-	this.getCurrentPoint = function() {
-		return _h_points[_point_index];
-	};
-
-	/**
-	 * @param {google.maps.LatLng} point
-	 * @param {boolean} call_service
-	 * @param {function} callback
-	 */
-	this.setLookat = function(point, call_service, callback) {
-		self.lookat = point;
-
-		if(_use_elevation && call_service) {
-			var e = getElevation([self.lookat], function(results){
-				if(results) {
-					_lookat_elevation = results[0].elevation;
-				} 
-				
-				if(callback && callback.apply) callback();
+		if (this.use_elevation && call_service) {
+			this.getElevation([this.lookat], (results) => {
+				if (results) {
+					this.lookat_elevation = results[0].elevation;
+				}
+				if (callback) callback();
 			});
 		} else {
-			if(callback && callback.apply) callback();
+			if (callback) callback();
 		}
-		
-	};
+	}
 
-	/**
-	 * @param {Number} v
-	 */
-	this.setFOV = function(v) {
-		_fov = Math.floor(v);
-		_camera.fov = _fov;
-		_camera.updateProjectionMatrix();
-	};
+	setFOV(v) {
+		this.fovValue = Math.floor(v);
+		this.camera.fov = this.fovValue;
+		this.camera.updateProjectionMatrix();
+	}
 
-	/**
-	 * @param {Number} width
-	 * @param {Number} height
-	 */
-	this.setSize = function(width, height) {
-		_w = width;
-		_h = height;
-		_renderer.setSize( _w, _h );
-		_camera.aspect = _w / _h;
-		_camera.updateProjectionMatrix();
-	};
+	setSize(width, height) {
+		this.w = width;
+		this.h = height;
+		this.renderer.setSize(this.w, this.h);
+		this.camera.aspect = this.w / this.h;
+		this.camera.updateProjectionMatrix();
+	}
 
-	/**
-	 * Resets all members to defaults
-	 */
-	this.reset = function() {
-		_raw_points.remove(0,-1);
-		_h_points.remove(0,-1);
+	reset() {
+		this.raw_points = [];
+		this.h_points = [];
 
-		self.tilt = 0;
+		this.tilt = 0;
+		this.lat = 0;
+		this.lon = 0;
 
-		_lat = 0;
-		_lon = 0;
+		this.position.x = 0;
+		this.offset.x = 0;
+		this.offset.y = 0;
+		this.offset.z = 0;
+		this.position_x = 0; // Note: position_x doesn't seem to be used in render?
+		this.position_y = 0;
 
-		self.position.x = 0;
-		self.offset.x = 0;
-		self.offset.y = 0;
-		self.offset.z = 0;
-		_position_x = 0;
-		_position_y = 0;
+		this.point_index = 0;
+		this.origin_heading = 0;
+		this.origin_pitch = 0;
 
-		_point_index = 0;
-		_origin_heading = 0;
-		_origin_pitch = 0;
+		this.forward = true;
+	}
 
-		_forward = true;
-	};
+	generate(params = {}) {
+		if (!this.isLoading) {
+			this.isLoading = true;
+			this.reset();
 
-	/**
-	 * @param {Object} parameters
-	 * @param {Number} [parameters.distance_between_points]
-	 * @param {Number} [parameters.max_points]
-	 * @param {google.maps.DirectionsResult} parameters.route
-	 */
-	this.generate = function( params ) {
+			this.distance_between_points = params.distance_between_points || this.distance_between_points;
+			this.max_points = params.max_points || this.max_points;
 
-		if(!_is_loading) {
-			_is_loading = true;
-			self.reset();
-
-			var p = params || {};
-			_distance_between_points = p.distance_between_points || _distance_between_points;
-			_max_points = p.max_points || _max_points;
-
-			if(p.route) {
-				handleDirectionsRoute(p.route);
+			if (params.route) {
+				this.handleDirectionsRoute(params.route);
 			} else {
 				console.log("No route provided.");
 			}
-
 		}
+	}
 
-	};
+	load() {
+		this.point_index = 0;
+		this.loader.composePanorama(this.h_points[this.point_index].pano_id);
+	}
 
-	/**
-	 * @fires Hyperlapse#onLoadComplete
-	 */
-	this.load = function() {
-		_point_index = 0;
-		_loader.composePanorama(_h_points[_point_index].pano_id);
-	};
-
-	/**
-	 * @fires Hyperlapse#onLoadCanceled
-	 */
-	this.cancel = function() {
-		if(_is_loading) {
-			_cancel_load = true;
-		} 
-	};
-
-	/**
-	 * @returns {google.maps.LatLng}
-	 */
-	this.getCameraPosition = function() {
-		return new google.maps.LatLng(_lat, _lon);
-	};
-
-	/**
-	 * Animate through all frames in sequence
-	 * @fires Hyperlapse#onPlay
-	 */
-	this.play = function() {
-		if(!_is_loading) {
-			_is_playing = true;
-			handlePlay({});
-		} 
-	};
-
-	/**
-	 * Pause animation
-	 * @fires Hyperlapse#onPause
-	 */
-	this.pause = function() {
-		_is_playing = false;
-		handlePause({});
-	};
-
-	/**
-	 * Display next frame in sequence
-	 * @fires Hyperlapse#onFrame
-	 */
-	this.next = function() {
-		self.pause();
-
-		if(_point_index+1 != _h_points.length) {
-			_point_index++;
-			drawMaterial();
+	cancel() {
+		if (this.isLoading) {
+			this.cancel_load = true;
 		}
-	};
+	}
 
-	/**
-	 * Display previous frame in sequence
-	 * @fires Hyperlapse#onFrame
-	 */
-	this.prev = function() {
-		self.pause();
+	getCameraPosition() {
+		return new google.maps.LatLng(this.lat, this.lon);
+	}
 
-		if(_point_index-1 !== 0) {
-			_point_index--;
-			drawMaterial();
+	play() {
+		if (!this.isLoading) {
+			this.isPlaying = true;
+			this.handlePlay({});
 		}
-	};
-};
+	}
+
+	pause() {
+		this.isPlaying = false;
+		this.handlePause({});
+	}
+
+	next() {
+		this.pause();
+		if (this.point_index + 1 !== this.h_points.length) {
+			this.point_index++;
+			this.drawMaterial();
+		}
+	}
+
+	prev() {
+		this.pause();
+		if (this.point_index - 1 !== -1) { // Original checked !== 0 which meant index 0 couldn't be reached backwards?
+            // Original: if(_point_index-1 !== 0)
+            // If index is 1, 1-1 = 0. So it wouldn't go to 0.
+            // That seems like a bug in original.
+			this.point_index--;
+			this.drawMaterial();
+		}
+	}
+}

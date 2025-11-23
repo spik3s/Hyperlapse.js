@@ -1,156 +1,138 @@
-export var GSVPANO = {};
+export const GSVPANO = {};
 
-GSVPANO.PanoLoader = function (parameters) {
-
-	'use strict';
-
-	var _parameters = parameters || {},
-		_location,
-		_zoom,
-		_panoId,
-		_panoClient = new google.maps.StreetViewService(),
-		_count = 0,
-		_total = 0,
-		_canvas = document.createElement('canvas'),
-		_ctx = _canvas.getContext('2d'),
-		rotation = 0,
-		pitch = 0,
-		copyright = '',
-		onSizeChange = null,
-		onPanoramaLoad = null;
+export class PanoLoader {
+	constructor(parameters = {}) {
+		this.parameters = parameters;
+		this.zoom = parameters.zoom || 1;
+		this.panoId = null;
+		this.panoClient = new google.maps.StreetViewService();
+		this.count = 0;
+		this.total = 0;
+		this.canvas = document.createElement('canvas');
+		this.ctx = this.canvas.getContext('2d');
+		this.rotation = 0;
+		this.pitch = 0;
+		this.copyright = '';
+		this.onSizeChange = null;
+		this.onPanoramaLoad = null;
+		this.onProgress = null;
+		this.onError = null;
+		this.onPanoramaData = null;
+		this.onNoPanoramaData = null;
 		
-	this.setProgress = function (p) {
-	
+		this.setZoom(this.zoom);
+	}
+
+	setProgress(p) {
 		if (this.onProgress) {
 			this.onProgress(p);
 		}
-		
-	};
+	}
 
-	this.throwError = function (message) {
-	
+	throwError(message) {
 		if (this.onError) {
 			this.onError(message);
 		} else {
 			console.error(message);
 		}
-		
-	};
+	}
 
-	this.adaptTextureToZoom = function () {
-	
-		var w = 512 * Math.pow(2, _zoom),
-			h = (512 * Math.pow(2, _zoom - 1));
-		_canvas.width = w;
-		_canvas.height = h;
-		_ctx.translate( _canvas.width, 0);
-		_ctx.scale(-1, 1);
-	};
+	adaptTextureToZoom() {
+		const w = 512 * Math.pow(2, this.zoom);
+		const h = 512 * Math.pow(2, this.zoom - 1);
+		this.canvas.width = w;
+		this.canvas.height = h;
+		this.ctx.translate(this.canvas.width, 0);
+		this.ctx.scale(-1, 1);
+	}
 
-	this.composeFromTile = function (x, y, texture) {
-	
+	composeFromTile(x, y, texture) {
 		if (texture) {
-			_ctx.drawImage(texture, x * 512, y * 512);
+			this.ctx.drawImage(texture, x * 512, y * 512);
 		}
-		_count++;
-		
-		var p = Math.round(_count * 100 / _total);
+		this.count++;
+
+		const p = Math.round(this.count * 100 / this.total);
 		this.setProgress(p);
-		
-		if (_count === _total) {
-			this.canvas = _canvas;
+
+		if (this.count === this.total) {
 			if (this.onPanoramaLoad) {
 				this.onPanoramaLoad();
 			}
 		}
-		
-	};
+	}
 
-	this.composePanorama = function (panoId) {
-	
+	composePanorama(panoId) {
 		this.setProgress(0);
-		console.log('Loading panorama for zoom ' + _zoom + '...');
-		
-		var w = Math.pow(2, _zoom),
-			h = Math.pow(2, _zoom - 1),
-			self = this,
-			url,
-			x,
-			y;
-				
-		_count = 0;
-		_total = w * h;
-	
-		for( y = 0; y < h; y++) {
-			for( x = 0; x < w; x++) {
-				url = 'https://geo0.ggpht.com/cbk?cb_client=maps_sv.tactile&authuser=0&hl=en&gl=us&output=tile&panoid=' + panoId + '&x=' + x + '&y=' + y + '&zoom=' + _zoom + '&nbt=1&fover=2';
+		console.log('Loading panorama for zoom ' + this.zoom + '...');
 
-				// if (_parameters.apiKey) {
-				// 	url += '&key=' + _parameters.apiKey;
+		const w = Math.pow(2, this.zoom);
+		const h = Math.pow(2, this.zoom - 1);
+		
+		this.count = 0;
+		this.total = w * h;
+
+		for (let y = 0; y < h; y++) {
+			for (let x = 0; x < w; x++) {
+				let url = `https://geo0.ggpht.com/cbk?cb_client=maps_sv.tactile&authuser=0&hl=en&gl=us&output=tile&panoid=${panoId}&x=${x}&y=${y}&zoom=${this.zoom}&nbt=1&fover=2`;
+
+				// if (this.parameters.apiKey) {
+				// 	url += `&key=${this.parameters.apiKey}`;
 				// }
 
-				(function (x, y) { 
-					var img = new Image();
-					img.addEventListener('load', function () {
-						self.composeFromTile(x, y, this);
-					});
-					img.addEventListener('error', function () {
-						self.composeFromTile(x, y, null);
-					});
-					img.crossOrigin = 'anonymous';
-					img.src = url;
-				})(x, y);
+				const img = new Image();
+				img.addEventListener('load', () => {
+					this.composeFromTile(x, y, img);
+				});
+				img.addEventListener('error', () => {
+					this.composeFromTile(x, y, null);
+				});
+				img.crossOrigin = 'anonymous';
+				img.src = url;
 			}
 		}
-		
-	};
-	
-	this.load = function (location, callback) {
-	
-		console.log('Load for', location);
-		var self = this;
+	}
 
-		var request = {
+	load(location, callback) {
+		console.log('Load for', location);
+
+		const request = {
 			location: location,
 			radius: 50
 		};
 
-		_panoClient.getPanorama(request, function (result, status) {
+		this.panoClient.getPanorama(request, (result, status) => {
 			if (status === google.maps.StreetViewStatus.OK) {
-				if( self.onPanoramaData ) self.onPanoramaData( result );
+				if (this.onPanoramaData) this.onPanoramaData(result);
 
-				var h = result.tiles ? result.tiles.centerHeading : 0;
 				if (result.tiles && result.tiles.centerHeading !== undefined) {
-					rotation = result.tiles.centerHeading * Math.PI / 180.0;
-					pitch = result.tiles.originPitch;
+					this.rotation = result.tiles.centerHeading * Math.PI / 180.0;
+					this.pitch = result.tiles.originPitch;
 				} else {
-					rotation = 0;
-					pitch = 0;
+					this.rotation = 0;
+					this.pitch = 0;
 				}
 
-				copyright = result.copyright;
-				self.copyright = result.copyright;
-				_panoId = result.location.pano;
-				self.location = location;
-				self.rotation = rotation;
-				self.pitch = pitch;
-				self.image_date = result.imageDate;
-				self.id = _panoId;
+				this.copyright = result.copyright;
+				this.panoId = result.location.pano;
+				this.location = location;
+				this.image_date = result.imageDate;
+				this.id = this.panoId;
+
 				callback();
 			} else {
-				if( self.onNoPanoramaData ) self.onNoPanoramaData( status );
-				self.throwError('Could not retrieve panorama for the following reason: ' + status);
+				if (this.onNoPanoramaData) this.onNoPanoramaData(status);
+				this.throwError('Could not retrieve panorama for the following reason: ' + status);
 				callback();
 			}
 		});
-		
-	};
-	
-	this.setZoom = function( z ) {
-		_zoom = z;
+	}
+
+	setZoom(z) {
+		this.zoom = z;
 		this.adaptTextureToZoom();
-	};
+	}
+}
 
-	this.setZoom( _parameters.zoom || 1 );
-
-};
+// Maintain backward compatibility for now, but PanoLoader is also exported directly.
+GSVPANO.PanoLoader = PanoLoader;
