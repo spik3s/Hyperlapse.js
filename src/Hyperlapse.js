@@ -389,17 +389,26 @@ export class Hyperlapse {
 	}
 
 	animate(timestamp) {
+		this.animationFrameId = requestAnimationFrame((t) => this.animate(t));
+
 		if (!this.lastTimestamp) this.lastTimestamp = timestamp;
 		const deltaTime = timestamp - this.lastTimestamp;
 		this.lastTimestamp = timestamp;
 
 		this.dtime += deltaTime;
 		if (this.dtime >= this.millis) {
-			if (this.isPlaying) this.loop();
+			if (this.isPlaying) {
+				try {
+					this.loop();
+				} catch (e) {
+					console.error("Error in loop:", e);
+					// Optionally pause to avoid spamming errors, or just let it skip this frame
+					// this.pause();
+				}
+			}
 			this.dtime = 0;
 		}
 
-		this.animationFrameId = requestAnimationFrame((t) => this.animate(t));
 		this.render();
 	}
 
