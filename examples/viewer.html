@@ -42,6 +42,7 @@
 	<script type="module">
 		import * as dat from 'dat.gui';
 		import { Hyperlapse } from '../src/Hyperlapse.js';
+		import { HyperlapseExporter } from '../src/HyperlapseExporter.js';
 		import { loadGoogleMaps } from '../src/GoogleMapsLoader.js';
 	
 		var start_point, end_point, lookat_point;
@@ -607,6 +608,24 @@
 			play_controls.add(hyperlapse, 'next');
 			play_controls.add(hyperlapse, 'prev');
 			play_controls.open();
+
+			var exporter = new HyperlapseExporter(hyperlapse);
+			var export_params = {
+				ratio: 'screen',
+				mode: 'loop',
+				export: function() {
+					exporter.export({
+						ratio: export_params.ratio,
+						mode: export_params.mode
+					});
+				}
+			};
+
+			var export_folder = gui.addFolder('Export');
+			export_folder.add(export_params, 'ratio', ['screen', '16:9', '9:16']);
+			export_folder.add(export_params, 'mode', ['single', 'loop']);
+			export_folder.add(export_params, 'export').name('Export Video');
+			export_folder.open();
 
 			gui.add(o, 'drop_pins');
 			gui.add(o, 'generate');
