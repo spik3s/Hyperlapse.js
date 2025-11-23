@@ -21,6 +21,7 @@ export class HyperlapseExporter {
 
 	getSupportedMimeType() {
 		const types = [
+			'video/mp4; codecs="avc3.424028, mp4a.40.2"',
 			'video/mp4; codecs="avc1.424028, mp4a.40.2"',
 			'video/mp4',
 			'video/webm; codecs=vp9',
