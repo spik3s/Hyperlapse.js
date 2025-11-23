@@ -27,6 +27,7 @@ class HyperlapsePoint {
 		this.location = location;
 		this.pano_id = pano_id;
 		this.heading = params.heading || 0;
+		this.course = params.course || 0;
 		this.pitch = params.pitch || 0;
 		this.elevation = params.elevation || 0;
 		this.image = params.image || null;
@@ -115,8 +116,6 @@ export class Hyperlapse {
 		this.renderer.setSize(this.w, this.h);
 
 		const geometry = new THREE.SphereGeometry(500, 60, 40);
-		// Invert geometry to view from inside
-		geometry.scale(-1, 1, 1);
 
 		this.mesh = new THREE.Mesh(
 			geometry,
@@ -222,12 +221,17 @@ export class Hyperlapse {
 	}
 
 	parsePoints(response) {
-		this.loader.load(this.raw_points[this.point_index], () => {
+		const p = this.raw_points[this.point_index];
+		const location = (p.lat && p.lng) ? p : p.location;
+		const course = (p.heading !== undefined) ? p.heading : 0;
+
+		this.loader.load(location, () => {
 			if (this.loader.id !== this.prev_pano_id) {
 				this.prev_pano_id = this.loader.id;
 
 				const hp = new HyperlapsePoint(this.loader.location, this.loader.id, {
 					heading: this.loader.rotation,
+					course: course,
 					pitch: this.loader.pitch,
 					elevation: this.loader.elevation,
 					copyright: this.loader.copyright,
@@ -291,17 +295,19 @@ export class Hyperlapse {
 			let d = 0;
 			let r = 0;
 			let a, b;
+			let heading = 0;
 
 			for (let i = 0; i < path.length; i++) {
 				if (i + 1 < path.length) {
 					a = path[i];
 					b = path[i+1];
 					d = google.maps.geometry.spherical.computeDistanceBetween(a, b);
+					heading = google.maps.geometry.spherical.computeHeading(a, b);
 
 					if (r > 0 && r < d) {
 						a = pointOnLine(r/d, a, b);
 						d = google.maps.geometry.spherical.computeDistanceBetween(a, b);
-						this.raw_points.push(a);
+						this.raw_points.push({ location: a, heading: heading });
 						r = 0;
 					} else if (r > 0 && r > d) {
 						r -= d;
@@ -315,7 +321,7 @@ export class Hyperlapse {
 								const t = j / segs;
 								if (t > 0 || (t+i) === 0) { // not start point
 									const way = pointOnLine(t, a, b);
-									this.raw_points.push(way);
+									this.raw_points.push({ location: way, heading: heading });
 								}
 							}
 							r = d - (this.d * segs);
@@ -324,7 +330,7 @@ export class Hyperlapse {
 						}
 					}
 				} else {
-					this.raw_points.push(path[i]);
+					this.raw_points.push({ location: path[i], heading: heading });
 				}
 			}
 			this.parsePoints(response);
@@ -366,7 +372,14 @@ export class Hyperlapse {
 			const o_y = this.position.y + (this.offset.y * t);
 			const o_z = this.tilt + (toRad(this.offset.z) * t);
 
-			const o_heading = (this.use_lookat) ? this.lookat_heading - toDeg(this.origin_heading) + o_x : o_x;
+			let target_heading;
+			if (this.use_lookat) {
+				target_heading = this.lookat_heading;
+			} else {
+				target_heading = (this.h_points[this.point_index].course || 0) + o_x;
+			}
+
+			const o_heading = target_heading - toDeg(this.origin_heading);
 			const o_pitch = this.position_y + o_y;
 
 			const olon = this.lon, olat = this.lat;
