@@ -355,10 +355,39 @@ export class Hyperlapse {
 					this.raw_points.push({ location: path[i], heading: heading });
 				}
 			}
+			this.smoothHeadings(3);
 			this.parsePoints(response);
 		} else {
 			this.pause();
 			this.handleDirectionsRoute(response);
+		}
+	}
+
+	smoothHeadings(window_size) {
+		const points = this.raw_points;
+		const smoothedHeadings = [];
+
+		for (let i = 0; i < points.length; i++) {
+			let sumSin = 0;
+			let sumCos = 0;
+			let count = 0;
+
+			for (let j = -window_size; j <= window_size; j++) {
+				const idx = i + j;
+				if (idx >= 0 && idx < points.length) {
+					const angle = toRad(points[idx].heading);
+					sumSin += Math.sin(angle);
+					sumCos += Math.cos(angle);
+					count++;
+				}
+			}
+
+			const avgAngle = Math.atan2(sumSin / count, sumCos / count);
+			smoothedHeadings.push(toDeg(avgAngle));
+		}
+
+		for (let i = 0; i < points.length; i++) {
+			points[i].heading = smoothedHeadings[i];
 		}
 	}
 
