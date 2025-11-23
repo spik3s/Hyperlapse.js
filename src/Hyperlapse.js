@@ -116,8 +116,6 @@ export class Hyperlapse {
 		this.renderer.setSize(this.w, this.h);
 
 		const geometry = new THREE.SphereGeometry(500, 60, 40);
-		// Invert geometry to view from inside
-		geometry.scale(-1, 1, 1);
 
 		this.mesh = new THREE.Mesh(
 			geometry,
@@ -381,8 +379,7 @@ export class Hyperlapse {
 				target_heading = (this.h_points[this.point_index].course || 0) + o_x;
 			}
 
-			// Add 180 to correct the flipped geometry/texture
-			const o_heading = target_heading - toDeg(this.origin_heading) + 180;
+			const o_heading = target_heading - toDeg(this.origin_heading);
 			const o_pitch = this.position_y + o_y;
 
 			const olon = this.lon, olat = this.lat;
