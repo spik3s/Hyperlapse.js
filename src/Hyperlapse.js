@@ -156,6 +156,8 @@ export class Hyperlapse {
 		this.isLoading = false;
 		this.point_index = 0;
 
+		this.drawMaterial();
+
 		if (this.animationFrameId) {
 			cancelAnimationFrame(this.animationFrameId);
 		}

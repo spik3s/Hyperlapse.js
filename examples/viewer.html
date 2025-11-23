@@ -469,6 +469,10 @@
 
 					if(start_pin) start_point = start_pin.position;
 					if(end_pin) end_point = end_pin.position;
+					if(pivot_pin) {
+						lookat_point = pivot_pin.position;
+						hyperlapse.setLookat(lookat_point);
+					}
 
 					if (!start_point || !end_point) {
 						console.log("Start or End point not defined.");
