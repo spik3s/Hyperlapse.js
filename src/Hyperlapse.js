@@ -402,8 +402,6 @@ export class Hyperlapse {
 					this.loop();
 				} catch (e) {
 					console.error("Error in loop:", e);
-					// Optionally pause to avoid spamming errors, or just let it skip this frame
-					// this.pause();
 				}
 			}
 			this.dtime = 0;
@@ -483,6 +481,11 @@ export class Hyperlapse {
 		this.camera.updateProjectionMatrix();
 	}
 
+	setZoom(z) {
+		this.zoom = z;
+		this.loader.setZoom(this.zoom);
+	}
+
 	setSize(width, height) {
 		this.w = width;
 		this.h = height;
@@ -494,6 +497,11 @@ export class Hyperlapse {
 	reset() {
 		this.raw_points = [];
 		this.h_points = [];
+
+		if(this.mesh.material.map) {
+			this.mesh.material.map.dispose();
+			this.mesh.material.map = new THREE.Texture();
+		}
 
 		this.tilt = 0;
 		this.lat = 0;

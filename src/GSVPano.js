@@ -42,6 +42,8 @@ export class PanoLoader {
 		const h = 512 * Math.pow(2, this.zoom - 1);
 		this.canvas.width = w;
 		this.canvas.height = h;
+		// Fix from feature-zoom-control: Reset transform before applying new translation/scale
+		this.ctx.setTransform(1, 0, 0, 1, 0, 0);
 		this.ctx.translate(this.canvas.width, 0);
 		this.ctx.scale(-1, 1);
 	}
