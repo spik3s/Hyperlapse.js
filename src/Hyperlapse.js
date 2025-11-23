@@ -157,8 +157,6 @@ export class Hyperlapse {
 		this.isLoading = false;
 		this.point_index = 0;
 
-		this.animate(0);
-
 		if (this.onLoadComplete) this.onLoadComplete(e);
 	}
 
