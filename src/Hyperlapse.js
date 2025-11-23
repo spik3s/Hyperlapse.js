@@ -33,6 +33,7 @@ class HyperlapsePoint {
 		this.image = params.image || null;
 		this.copyright = params.copyright || "© 2013 Google";
 		this.image_date = params.image_date || "";
+		this.is_skipped = false;
 	}
 }
 
@@ -165,6 +166,15 @@ export class Hyperlapse {
 	handleLoadComplete(e) {
 		this.isLoading = false;
 		this.point_index = 0;
+
+		// Skip initial skipped points
+		while (this.point_index < this.h_points.length && this.h_points[this.point_index].is_skipped) {
+			this.point_index++;
+		}
+		// If all points are skipped, reset to 0 (or handle gracefully)
+		if (this.point_index >= this.h_points.length) {
+			this.point_index = 0;
+		}
 
 		this.drawMaterial();
 
@@ -442,14 +452,44 @@ export class Hyperlapse {
 		this.drawMaterial();
 
 		if (this.forward) {
-			if (++this.point_index === this.h_points.length) {
-				this.point_index = this.h_points.length - 1;
+			let next_index = this.point_index + 1;
+			while (next_index < this.h_points.length && this.h_points[next_index].is_skipped) {
+				next_index++;
+			}
+
+			if (next_index < this.h_points.length) {
+				this.point_index = next_index;
+			} else {
+				// Reached end, reverse
 				this.forward = !this.forward;
+				// Find previous valid point to start reversing
+				let prev_index = this.point_index - 1;
+				while (prev_index >= 0 && this.h_points[prev_index].is_skipped) {
+					prev_index--;
+				}
+				if (prev_index >= 0) {
+					this.point_index = prev_index;
+				}
 			}
 		} else {
-			if (--this.point_index === -1) {
-				this.point_index = 0;
+			let prev_index = this.point_index - 1;
+			while (prev_index >= 0 && this.h_points[prev_index].is_skipped) {
+				prev_index--;
+			}
+
+			if (prev_index >= 0) {
+				this.point_index = prev_index;
+			} else {
+				// Reached start, reverse
 				this.forward = !this.forward;
+				// Find next valid point to start forwarding
+				let next_index = this.point_index + 1;
+				while (next_index < this.h_points.length && this.h_points[next_index].is_skipped) {
+					next_index++;
+				}
+				if (next_index < this.h_points.length) {
+					this.point_index = next_index;
+				}
 			}
 		}
 	}
@@ -610,19 +650,24 @@ export class Hyperlapse {
 
 	next() {
 		this.pause();
-		if (this.point_index + 1 !== this.h_points.length) {
-			this.point_index++;
+		let next_index = this.point_index + 1;
+		while (next_index < this.h_points.length && this.h_points[next_index].is_skipped) {
+			next_index++;
+		}
+		if (next_index < this.h_points.length) {
+			this.point_index = next_index;
 			this.drawMaterial();
 		}
 	}
 
 	prev() {
 		this.pause();
-		if (this.point_index - 1 !== -1) { // Original checked !== 0 which meant index 0 couldn't be reached backwards?
-            // Original: if(_point_index-1 !== 0)
-            // If index is 1, 1-1 = 0. So it wouldn't go to 0.
-            // That seems like a bug in original.
-			this.point_index--;
+		let prev_index = this.point_index - 1;
+		while (prev_index >= 0 && this.h_points[prev_index].is_skipped) {
+			prev_index--;
+		}
+		if (prev_index >= 0) {
+			this.point_index = prev_index;
 			this.drawMaterial();
 		}
 	}
