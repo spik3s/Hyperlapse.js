@@ -157,6 +157,11 @@ export class Hyperlapse {
 		this.isLoading = false;
 		this.point_index = 0;
 
+		if (this.animationFrameId) {
+			cancelAnimationFrame(this.animationFrameId);
+		}
+		this.animate(performance.now());
+
 		if (this.onLoadComplete) this.onLoadComplete(e);
 	}
 
