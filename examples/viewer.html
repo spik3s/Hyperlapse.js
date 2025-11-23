@@ -3,7 +3,42 @@
 <head> 
 	<meta http-equiv="content-type" content="text/html; charset=UTF-8"/> 
 	<title>Viewer Example</title> 
-
+	<style>
+		body {
+			font-family: sans-serif;
+			margin: 0;
+			overflow: hidden;
+		}
+		#controls {
+			position: absolute;
+			top: 10px;
+			left: 10px;
+			z-index: 10;
+			background: rgba(255, 255, 255, 0.9);
+			padding: 10px;
+			border-radius: 5px;
+			opacity: 1;
+			transition: opacity 0.3s;
+		}
+		#map {
+			width: 400px;
+			height: 300px;
+			margin-bottom: 10px;
+		}
+		#text {
+			width: 400px;
+			height: 120px;
+			padding: 10px;
+			background: #eee;
+			border: 1px solid #ccc;
+			overflow: auto;
+			font-family: monospace;
+			font-size: 12px;
+		}
+		#map_form {
+			margin-bottom: 10px;
+		}
+	</style>
 	<script type="module">
 		import * as dat from 'dat.gui';
 		import { Hyperlapse } from '../src/Hyperlapse.js';
@@ -582,14 +617,14 @@
 <body> 
 	<div id="pano" style="position: absolute; left: 0; top: 0; right: 0; bottom: 0; z-index:-1;"></div>
 	<div id="controls">
-		<div id="map" style="width: 400px; height: 300px; float: left; padding: 0;"></div>
-		<div id="controls" style="">
+		<div id="map"></div>
+		<div id="controls_form">
 			<form id="map_form">
-				<input type="text" name="address" id="address" />
+				<input type="text" name="address" id="address" placeholder="Search address..." />
 				<button type="submit" id="searchButton" >Search</button>
 			</form>
 		</div>
-		<div id="text" style="width: 500px; height: 120px; float: left; padding-top: 10px; z-index:0; border-style:solid; border-width:medium;"></div>
+		<div id="text"></div>
 	</div>
 	
 	
