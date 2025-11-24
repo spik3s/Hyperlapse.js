@@ -141,10 +141,9 @@ export class AutomationController {
         if (this.points[this.points.length - 1].x !== 1) this.points[this.points.length - 1].x = 1;
     }
 
-    getValueAt(t) {
+    getYAt(t) {
         // t is 0 to 1
-        // Find segment
-        if (this.points.length < 2) return 0;
+        if (this.points.length < 2) return 0.5; // Default center
 
         // Clamp t
         t = Math.max(0, Math.min(1, t));
@@ -160,13 +159,15 @@ export class AutomationController {
             }
         }
 
-        // Linear interpolation
         const range = p1.x - p0.x;
-        if (range === 0) return this.mapY(p0.y);
+        if (range === 0) return p0.y;
 
         const localT = (t - p0.x) / range;
-        const y = p0.y + (p1.y - p0.y) * localT;
+        return p0.y + (p1.y - p0.y) * localT;
+    }
 
+    getValueAt(t) {
+        const y = this.getYAt(t);
         return this.mapY(y);
     }
 
@@ -214,15 +215,52 @@ export class AutomationController {
         ctx.lineTo(w, h / 2);
         ctx.stroke();
 
-        // Draw curve
+        // Draw curve (Raw)
         ctx.strokeStyle = '#00ffcc';
         ctx.lineWidth = 2;
+        ctx.setLineDash([]);
         ctx.beginPath();
         ctx.moveTo(this.points[0].x * w, this.points[0].y * h);
         for (let i = 1; i < this.points.length; i++) {
             ctx.lineTo(this.points[i].x * w, this.points[i].y * h);
         }
         ctx.stroke();
+
+        // Draw smoothed curve (Simulated)
+        if (this.smoothing > 0) {
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 1;
+            ctx.setLineDash([5, 5]); // Dashed line to distinguish
+            ctx.beginPath();
+
+            // Simulation parameters
+            // We simulate the lag effect. The 'smoothing' factor in viewer.html acts per frame.
+            // To visualize this spatially, we need to approximate the step size.
+            // Assuming the graph width represents the total time, and we iterate pixel by pixel.
+            // A higher smoothing value means more inertia.
+
+            const steps = w; // One step per pixel
+
+            // We need to work in Y-space (canvas coordinates) for drawing
+            let currentY = this.points[0].y; // Start exactly at first point
+
+            // Adjust alpha for visualization to be somewhat representative
+            const alpha = (1 - this.smoothing);
+
+            ctx.moveTo(0, currentY * h);
+
+            for (let i = 1; i < steps; i++) {
+                const t = i / steps;
+                const targetY = this.getYAt(t);
+
+                // Exponential Moving Average
+                currentY += (targetY - currentY) * alpha;
+
+                ctx.lineTo(i, currentY * h);
+            }
+            ctx.stroke();
+            ctx.setLineDash([]); // Reset
+        }
 
         // Draw points
         for (let i = 0; i < this.points.length; i++) {
@@ -234,6 +272,10 @@ export class AutomationController {
         }
 
         // Draw playhead
+        if (this.playhead >= 100) { // Bug in previous file? No wait. t is 0 to 1. 100 is wrong.
+             // Wait, the logic was playhead >= 0 && playhead <= 1.
+        }
+
         if (this.playhead >= 0 && this.playhead <= 1) {
             ctx.strokeStyle = '#ff3333';
             ctx.lineWidth = 1;
