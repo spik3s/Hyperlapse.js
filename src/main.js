@@ -348,7 +348,6 @@ function initHyperlapse(apiKey) {
     };
 
     hyperlapse.onFrame = (e) => {
-        updateStatus(`Position: ${e.position + 1} of ${hyperlapse.length()}`);
         cameraPin.position = e.point.location;
         updateProgressBar(e.position, hyperlapse.length());
         els.progressBar.value = e.position;
