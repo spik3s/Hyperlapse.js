@@ -58,11 +58,12 @@ export class AutomationController {
             this.activePointIndex = index;
             this.isDragging = true;
         } else {
-            // Check if we are clicking on the line to add a point?
-            // Or just double click to add?
-            // User requirement: "User can add multiple dragging points"
-            // Let's rely on double click for adding/removing, or close proximity click.
-            // For now, dragging existing.
+            // Add new point
+            const newPoint = { x: Math.max(0, Math.min(1, pos.x)), y: Math.max(0, Math.min(1, pos.y)) };
+            this.points.push(newPoint);
+            this.sortPoints();
+            this.activePointIndex = this.points.indexOf(newPoint);
+            this.isDragging = true;
         }
         this.render();
     }
@@ -78,9 +79,11 @@ export class AutomationController {
             } else if (this.activePointIndex === this.points.length - 1) {
                 this.points[this.points.length - 1].y = Math.max(0, Math.min(1, pos.y));
             } else {
-                this.points[this.activePointIndex].x = Math.max(0, Math.min(1, pos.x));
-                this.points[this.activePointIndex].y = Math.max(0, Math.min(1, pos.y));
+                const p = this.points[this.activePointIndex];
+                p.x = Math.max(0, Math.min(1, pos.x));
+                p.y = Math.max(0, Math.min(1, pos.y));
                 this.sortPoints();
+                this.activePointIndex = this.points.indexOf(p);
             }
         } else {
             this.hoverPointIndex = this.findPoint(pos);
@@ -103,11 +106,8 @@ export class AutomationController {
             // Remove point if it's not start or end
             if (index > 0 && index < this.points.length - 1) {
                 this.points.splice(index, 1);
+                this.activePointIndex = -1;
             }
-        } else {
-            // Add point
-            this.points.push({ x: pos.x, y: pos.y });
-            this.sortPoints();
         }
         this.render();
     }
@@ -117,8 +117,8 @@ export class AutomationController {
         const rX = radius / this.width;
         const rY = radius / this.height;
 
-        // Search in reverse to select top-most if overlap (though sorting handles order)
-        for (let i = 0; i < this.points.length; i++) {
+        // Search in reverse to select top-most if overlap
+        for (let i = this.points.length - 1; i >= 0; i--) {
             const p = this.points[i];
             if (Math.abs(p.x - pos.x) < rX && Math.abs(p.y - pos.y) < rY) {
                 return i;
