@@ -206,14 +206,40 @@ export class AutomationController {
         ctx.fillRect(0, 0, w, h);
 
         // Grid lines
-        ctx.strokeStyle = '#444';
-        ctx.lineWidth = 1;
+        ctx.font = '10px sans-serif';
 
-        // Center line (0 degrees)
-        ctx.beginPath();
-        ctx.moveTo(0, h / 2);
-        ctx.lineTo(w, h / 2);
-        ctx.stroke();
+        for (let deg = -360; deg <= 360; deg += 90) {
+            const normalizedY = 0.5 - (deg / 720);
+            const y = normalizedY * h;
+
+            ctx.beginPath();
+
+            if (deg === 0) {
+                ctx.strokeStyle = '#555';
+                ctx.lineWidth = 1;
+                ctx.setLineDash([]);
+            } else {
+                ctx.strokeStyle = '#444';
+                ctx.lineWidth = 1;
+                ctx.setLineDash([4, 4]);
+            }
+
+            ctx.moveTo(0, y);
+            ctx.lineTo(w, y);
+            ctx.stroke();
+
+            // Labels
+            ctx.fillStyle = '#666';
+            if (deg === 360) {
+                ctx.textBaseline = 'top';
+                ctx.fillText(deg + '°', 5, y + 2);
+            } else {
+                ctx.textBaseline = 'bottom';
+                ctx.fillText(deg + '°', 5, y - 2);
+            }
+        }
+
+        ctx.setLineDash([]);
 
         // Draw curve (Raw)
         ctx.strokeStyle = '#00ffcc';
