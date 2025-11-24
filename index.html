@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hyperlapse.js Creator</title>
+    <link rel="stylesheet" href="/src/style.css">
+</head>
+<body>
+    <div id="app">
+        <!-- Left Panel: Configuration -->
+        <aside id="sidebar">
+            <div class="sidebar-header">
+                <h1>CONFIG</h1>
+            </div>
+            
+            <div class="sidebar-content">
+                <!-- Status -->
+                <div class="section">
+                    <div id="status-indicator" class="status-ready">Ready (0/0)</div>
+                </div>
+
+                <!-- Load Panoramas -->
+                <div class="section">
+                    <button id="btn-load-panoramas" class="btn-primary">LOAD PANORAMAS</button>
+                </div>
+
+                <!-- Route Definition -->
+                <div class="section">
+                    <h2 class="section-title">ROUTE DEFINITION</h2>
+                    <div class="control-group">
+                        <label for="max-steps">Max Steps</label>
+                        <div class="slider-container">
+                            <input type="range" id="max-steps" min="10" max="300" value="100">
+                            <span id="max-steps-val">100</span>
+                        </div>
+                    </div>
+                    <div class="control-group">
+                        <label for="distance">Distance (m)</label>
+                        <div class="slider-container">
+                            <input type="range" id="distance" min="5" max="100" value="10">
+                            <span id="distance-val">10</span>
+                        </div>
+                    </div>
+                    <button id="btn-recalculate" class="btn-secondary">Recalculate Route</button>
+                </div>
+
+                <!-- Camera Optics -->
+                <div class="section">
+                    <h2 class="section-title">CAMERA OPTICS</h2>
+                    <div class="control-group">
+                        <label for="zoom">Zoom</label>
+                        <div class="slider-container">
+                            <input type="range" id="zoom" min="0" max="5" step="1" value="1">
+                            <span id="zoom-val">1</span>
+                        </div>
+                    </div>
+                    <div class="control-group">
+                        <label for="fov">FOV</label>
+                        <div class="slider-container">
+                            <input type="range" id="fov" min="1" max="180" value="80">
+                            <span id="fov-val">80</span>
+                        </div>
+                    </div>
+                    <div class="control-group">
+                        <label for="elevation">Elevation</label>
+                        <div class="slider-container">
+                            <input type="range" id="elevation" min="-1000" max="1000" value="0">
+                            <span id="elevation-val">0</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Advanced (Collapsed by default - implemented as open for now for simplicity or use details/summary) -->
+                <details class="section">
+                    <summary class="section-title">ADVANCED</summary>
+                    <div class="control-group">
+                        <label for="tilt">Tilt</label>
+                        <div class="slider-container">
+                            <input type="range" id="tilt" min="-3.14" max="3.14" step="0.01" value="0">
+                            <span id="tilt-val">0</span>
+                        </div>
+                    </div>
+                     <div class="control-group">
+                        <label for="offset-x">Offset X</label>
+                        <div class="slider-container">
+                            <input type="range" id="offset-x" min="-360" max="360" value="0">
+                            <span id="offset-x-val">0</span>
+                        </div>
+                    </div>
+                     <div class="control-group">
+                        <label for="offset-y">Offset Y</label>
+                        <div class="slider-container">
+                            <input type="range" id="offset-y" min="-180" max="180" value="0">
+                            <span id="offset-y-val">0</span>
+                        </div>
+                    </div>
+                     <div class="control-group">
+                        <label for="offset-z">Offset Z</label>
+                        <div class="slider-container">
+                            <input type="range" id="offset-z" min="-360" max="360" value="0">
+                            <span id="offset-z-val">0</span>
+                        </div>
+                    </div>
+                </details>
+
+                <!-- Animation Settings -->
+                <div class="section">
+                    <h2 class="section-title">ANIMATION SETTINGS</h2>
+                    <div class="control-group">
+                        <label for="duration">Duration (ms)</label>
+                        <div class="slider-container">
+                            <input type="range" id="duration" min="10" max="250" value="50">
+                            <span id="duration-val">50</span>
+                        </div>
+                    </div>
+                </div>
+                 <!-- Search -->
+                <div class="section">
+                     <h2 class="section-title">SEARCH</h2>
+                     <form id="search-form">
+                        <input type="text" id="search-input" placeholder="Search address...">
+                        <button type="submit" class="btn-secondary">Search</button>
+                     </form>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Right Panel: Working Stage -->
+        <main id="main-stage">
+            <div id="map-container">
+                <!-- Google Maps will be injected here -->
+            </div>
+            <div id="pano-container">
+                <!-- Street View/Hyperlapse will be injected here -->
+            </div>
+            
+            <!-- Playback Controls -->
+            <div id="playback-bar">
+                <div id="frame-counter">Frame 0/0</div>
+                <div class="playback-controls">
+                    <button id="btn-prev" class="control-btn">
+                        <svg viewBox="0 0 24 24" width="24" height="24"><path fill="currentColor" d="M6 6h2v12H6zm3.5 6l8.5 6V6z"/></svg>
+                    </button>
+                    <button id="btn-play" class="control-btn">
+                        <svg viewBox="0 0 24 24" width="24" height="24" id="icon-play"><path fill="currentColor" d="M8 5v14l11-7z"/></svg>
+                        <svg viewBox="0 0 24 24" width="24" height="24" id="icon-pause" style="display:none"><path fill="currentColor" d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/></svg>
+                    </button>
+                    <button id="btn-next" class="control-btn">
+                        <svg viewBox="0 0 24 24" width="24" height="24"><path fill="currentColor" d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
+                    </button>
+                </div>
+                <div class="progress-container">
+                    <input type="range" id="progress-bar" min="0" max="100" value="0">
+                </div>
+            </div>
+        </main>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+</body>
+</html>
