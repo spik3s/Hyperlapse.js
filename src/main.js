@@ -1,5 +1,7 @@
 import { Hyperlapse } from './Hyperlapse.js';
 import { loadGoogleMaps } from './GoogleMapsLoader.js';
+import { AutomationController } from './AutomationController.js';
+import { HyperlapseExporter } from './HyperlapseExporter.js';
 
 // State
 let hyperlapse;
@@ -11,7 +13,19 @@ let routeMarkers = [];
 let waypoints = [];
 let waypointMarkers = [];
 let isPlaying = false;
-let animationFrameId;
+let automationController;
+let exporter;
+let currentAutomationValue = 0;
+let ignoreDirectionsChange = false;
+
+// Context Menu State
+const contextMenu = {
+    el: document.getElementById('context-menu'),
+    skipItem: document.getElementById('menu-skip'),
+    includeItem: document.getElementById('menu-include'),
+    currentPoint: null,
+    currentMarkerEl: null
+};
 
 // DOM Elements
 const els = {
@@ -30,12 +44,19 @@ const els = {
     elevationVal: document.getElementById('elevation-val'),
     tilt: document.getElementById('tilt'),
     tiltVal: document.getElementById('tilt-val'),
+    smoothing: document.getElementById('smoothing'),
+    smoothingVal: document.getElementById('smoothing-val'),
     offsetX: document.getElementById('offset-x'),
     offsetXVal: document.getElementById('offset-x-val'),
     offsetY: document.getElementById('offset-y'),
     offsetYVal: document.getElementById('offset-y-val'),
     offsetZ: document.getElementById('offset-z'),
     offsetZVal: document.getElementById('offset-z-val'),
+    radius: document.getElementById('radius'),
+    radiusVal: document.getElementById('radius-val'),
+    bufferSize: document.getElementById('buffer-size'),
+    bufferSizeVal: document.getElementById('buffer-size-val'),
+    googleOnly: document.getElementById('google-only'),
     duration: document.getElementById('duration'),
     durationVal: document.getElementById('duration-val'),
     searchForm: document.getElementById('search-form'),
@@ -48,15 +69,25 @@ const els = {
     iconPause: document.getElementById('icon-pause'),
     progressBar: document.getElementById('progress-bar'),
     mapContainer: document.getElementById('map-container'),
-    panoContainer: document.getElementById('pano-container')
+    panoContainer: document.getElementById('pano-container'),
+    mode: document.getElementById('mode'),
+    automationContainer: document.getElementById('automation-container'),
+    automationPanel: document.getElementById('automation-panel'),
+    automationResizeHandle: document.getElementById('automation-resize-handle'),
+    exportRatio: document.getElementById('export-ratio'),
+    exportMode: document.getElementById('export-mode'),
+    btnExport: document.getElementById('btn-export'),
+    sidebar: document.getElementById('sidebar'), // For hiding UI
+    controls: document.getElementById('sidebar') // Alias for viewer.html parity logic if needed
 };
 
-// Configuration
-const config = {
+// Initial Config (will be overwritten by Hash)
+let config = {
     startPoint: { lat: 44.3431, lng: 6.783936 },
     endPoint: { lat: 44.340578, lng: 6.782684 },
     lookatPoint: { lat: 44.34232747290594, lng: 6.786460550292986 },
-    elevation: 0
+    elevation: 0,
+    waypoints: []
 };
 
 async function init() {
@@ -67,14 +98,81 @@ async function init() {
         return;
     }
 
+    // Parse Hash
+    parseHash();
+
     try {
         await loadGoogleMaps(apiKey);
         initMap();
         initHyperlapse(apiKey);
+        setupAutomation();
+        setupExporter();
         setupEventListeners();
+        setupContextMenu();
+
+        // Setup Resize Handle
+        setupResizeHandle();
+
+        // Initial Route Generation
+        if (config.startPoint && config.endPoint) {
+            generateRoute();
+        }
+
     } catch (e) {
         console.error("Failed to load Google Maps", e);
     }
+}
+
+function parseHash() {
+    if( window.location.hash ) {
+        const parts = window.location.hash.substr( 1 ).split( ',' );
+        config.startPoint = { lat: parseFloat(parts[0]), lng: parseFloat(parts[1]) };
+        config.lookatPoint = { lat: parseFloat(parts[2]), lng: parseFloat(parts[3]) };
+        config.endPoint = { lat: parseFloat(parts[4]), lng: parseFloat(parts[5]) };
+        config.elevation = parseFloat(parts[6]) || 0;
+
+        // Update UI for elevation
+        els.elevation.value = config.elevation;
+        els.elevationVal.textContent = config.elevation;
+
+        // Parse waypoints
+        config.waypoints = [];
+        if (parts.length > 7) {
+            for (let i = 7; i < parts.length; i += 2) {
+                if (parts[i] && parts[i+1]) {
+                    config.waypoints.push({
+                        location: { lat: parseFloat(parts[i]), lng: parseFloat(parts[i+1]) },
+                        stopover: true
+                    });
+                }
+            }
+        }
+        waypoints = config.waypoints;
+    }
+}
+
+function updateHash() {
+    // Helper to get lat/lng from various Google Maps objects
+    const getPos = (p) => {
+        // If it's a LatLng object with methods
+        if (typeof p.lat === 'function') return { lat: p.lat(), lng: p.lng() };
+        // If it's a plain object
+        return p;
+    };
+
+    const s = getPos(startPin.position);
+    const p = getPos(pivotPin.position);
+    const e = getPos(endPin.position);
+
+    let hash = `${s.lat},${s.lng},${p.lat},${p.lng},${e.lat},${e.lng},${hyperlapse.elevation_offset || 0}`;
+
+    // Append waypoints
+    for (let i = 0; i < waypoints.length; i++) {
+        const wp = getPos(waypoints[i].location);
+        hash += `,${wp.lat},${wp.lng}`;
+    }
+
+    window.location.hash = hash;
 }
 
 function initMap() {
@@ -95,17 +193,57 @@ function initMap() {
         map: map
     });
 
+    // Custom "Center on Play Marker" Control
+    const centerControlDiv = document.createElement("div");
+    centerControlDiv.className = "custom-map-control-button";
+    centerControlDiv.title = "Center on play marker";
+    centerControlDiv.innerHTML = `
+        <div class="custom-map-control-icon">
+            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="12" cy="12" r="10" stroke="#666" stroke-width="2"/>
+                <circle cx="12" cy="12" r="4" fill="#666"/>
+                <line x1="12" y1="2" x2="12" y2="6" stroke="#666" stroke-width="2"/>
+                <line x1="12" y1="18" x2="12" y2="22" stroke="#666" stroke-width="2"/>
+                <line x1="2" y1="12" x2="6" y2="12" stroke="#666" stroke-width="2"/>
+                <line x1="18" y1="12" x2="22" y2="12" stroke="#666" stroke-width="2"/>
+            </svg>
+        </div>
+    `;
+    centerControlDiv.addEventListener("click", () => {
+        const pos = cameraPin && (cameraPin.position || (cameraPin.getPosition && cameraPin.getPosition()));
+        if (pos) map.setCenter(pos);
+    });
+    map.controls[google.maps.ControlPosition.RIGHT_BOTTOM].push(centerControlDiv);
+
+
     // Pins
-    startPin = createPin(config.startPoint, '#4CAF50', '#2E7D32'); // Green
-    endPin = createPin(config.endPoint, '#F44336', '#C62828'); // Red
+    startPin = createPin(config.startPoint, '#4CAF50', '#2E7D32', 'white', true); // Green
+    endPin = createPin(config.endPoint, '#F44336', '#C62828', 'white', true); // Red
     pivotPin = createPin(config.lookatPoint, '#FFEB3B', '#FBC02D', 'black', true); // Yellow
     cameraPin = createPin(config.startPoint, '#2196F3', '#1565C0'); // Blue
 
+    // Drag Listeners
+    startPin.addEventListener('dragend', () => {
+        config.startPoint = startPin.position;
+        generateRoute();
+    });
+
+    endPin.addEventListener('dragend', () => {
+        config.endPoint = endPin.position;
+        generateRoute();
+    });
+
     pivotPin.addEventListener('dragend', () => {
         hyperlapse.setLookat(pivotPin.position);
+        updateHash();
     });
 
     directionsRenderer.addListener('directions_changed', handleDirectionsChanged);
+
+    // Initial waypoints if any (from hash)
+    if (waypoints.length > 0) {
+        refreshWaypointMarkers(waypoints.map(wp => wp.location));
+    }
 }
 
 function createPin(position, background, borderColor, glyphColor = 'white', draggable = false) {
@@ -125,6 +263,17 @@ function createPin(position, background, borderColor, glyphColor = 'white', drag
     return pin;
 }
 
+function createYellowCircleElement() {
+    const el = document.createElement('div');
+    el.style.width = '10px';
+    el.style.height = '10px';
+    el.style.backgroundColor = '#FFEB3B'; // Yellow
+    el.style.border = '2px solid #FBC02D'; // Darker yellow border
+    el.style.borderRadius = '50%';
+    el.style.cursor = 'pointer';
+    return el;
+}
+
 function initHyperlapse(apiKey) {
     hyperlapse = new Hyperlapse(els.panoContainer, {
         lookat: config.lookatPoint,
@@ -133,12 +282,16 @@ function initHyperlapse(apiKey) {
         width: els.panoContainer.clientWidth,
         height: els.panoContainer.clientHeight,
         zoom: parseInt(els.zoom.value),
-        use_lookat: true,
+        use_lookat: els.mode.value === 'LookAt',
         distance_between_points: parseInt(els.distance.value),
         max_points: parseInt(els.maxSteps.value),
         elevation: parseInt(els.elevation.value),
+        radius: parseInt(els.radius.value),
         apiKey: apiKey
     });
+
+    // Set initial buffer size from UI
+    hyperlapse.buffer_size = parseInt(els.bufferSize.value);
 
     hyperlapse.onError = (e) => {
         console.error(e);
@@ -146,23 +299,40 @@ function initHyperlapse(apiKey) {
     };
 
     hyperlapse.onRouteProgress = (e) => {
+        const el = createYellowCircleElement();
         const marker = new google.maps.marker.AdvancedMarkerElement({
             position: e.point.location,
-            gmpDraggable: false,
-            content: new google.maps.marker.PinElement({
-                background: '#FFEB3B',
-                borderColor: '#FBC02D',
-                glyphColor: 'black',
-                scale: 0.5,
-            }).element,
+            gmpDraggable: true,
+            content: el,
             map: map
         });
+
+        // Context Menu
+        el.addEventListener('contextmenu', function(event) {
+            event.preventDefault();
+            event.stopPropagation();
+            showContextMenu(event.clientX, event.clientY, e.point, el);
+        });
+
+        // Drag to add waypoint
+        marker.addEventListener('dragend', function (event) {
+            waypoints.push({
+                location: marker.position,
+                stopover: true
+            });
+            generateRoute();
+        });
+
         routeMarkers.push(marker);
     };
 
     hyperlapse.onRouteComplete = (e) => {
+        ignoreDirectionsChange = true;
         directionsRenderer.setDirections(e.response);
+        ignoreDirectionsChange = false;
+
         updateStatus(`Route generated. Points: ${hyperlapse.length()}`);
+        updateHash();
         hyperlapse.load();
     };
 
@@ -182,16 +352,127 @@ function initHyperlapse(apiKey) {
         cameraPin.position = e.point.location;
         updateProgressBar(e.position, hyperlapse.length());
         els.progressBar.value = e.position;
+
+        // Automation Logic
+        if (els.mode.value === 'Automation' && hyperlapse.length() > 0) {
+            const t = e.position / (hyperlapse.length() - 1);
+            let targetYaw = automationController.getValueAt(t);
+
+            const smoothing = parseFloat(els.smoothing.value);
+            if (smoothing > 0) {
+                const alpha = 1 - smoothing;
+                currentAutomationValue += (targetYaw - currentAutomationValue) * alpha;
+            } else {
+                currentAutomationValue = targetYaw;
+            }
+            hyperlapse.position.x = currentAutomationValue;
+
+            // Sync UI inputs if we want (e.g. offsetX slider?), but maybe redundant.
+            // els.offsetX.value = currentAutomationValue; // Can loop back, be careful.
+
+            // Update playhead
+            automationController.setPlayhead(t);
+        }
     };
 
-    // Initial generation
-    generateRoute();
+    // Drag on Pano logic
+    setupPanoInteraction();
+}
+
+function setupPanoInteraction() {
+    let isMoving = false;
+    let onPointerDownPointerX = 0, onPointerDownPointerY = 0;
+    let px = 0, py = 0;
+
+    els.panoContainer.addEventListener('mousedown', function(e) {
+        if (els.mode.value === 'Automation') return;
+        e.preventDefault();
+        isMoving = true;
+        onPointerDownPointerX = e.clientX;
+        onPointerDownPointerY = e.clientY;
+        px = hyperlapse.position.x;
+        py = hyperlapse.position.y;
+    });
+
+    els.panoContainer.addEventListener('mousemove', function(e) {
+        if (isMoving) {
+            e.preventDefault();
+            const f = hyperlapse.fov() / 500;
+            const dx = (onPointerDownPointerX - e.clientX) * f;
+            const dy = (e.clientY - onPointerDownPointerY) * f;
+            hyperlapse.position.x = px + dx;
+            hyperlapse.position.y = py + dy;
+
+            // Sync UI sliders
+            els.offsetX.value = hyperlapse.position.x;
+            els.offsetXVal.textContent = Math.round(hyperlapse.position.x);
+            els.offsetY.value = hyperlapse.position.y;
+            els.offsetYVal.textContent = Math.round(hyperlapse.position.y);
+        }
+    });
+
+    window.addEventListener('mouseup', function() {
+        isMoving = false;
+    });
+}
+
+function setupAutomation() {
+    automationController = new AutomationController(els.automationPanel);
+
+    // Initial visibility check
+    if (els.mode.value === 'Automation') {
+        els.automationContainer.style.display = 'flex';
+        automationController.resize();
+    } else {
+        els.automationContainer.style.display = 'none';
+    }
+}
+
+function setupExporter() {
+    exporter = new HyperlapseExporter(hyperlapse);
+}
+
+function setupResizeHandle() {
+    let isResizing = false;
+    const handle = els.automationResizeHandle;
+    const container = els.automationContainer;
+    const pano = els.panoContainer;
+    const map = els.mapContainer;
+
+    handle.addEventListener('mousedown', (e) => {
+        isResizing = true;
+        document.body.style.cursor = 'ns-resize';
+    });
+
+    window.addEventListener('mousemove', (e) => {
+        if (!isResizing) return;
+
+        // Calculate new height relative to the bottom of the main-stage
+        // The container is at the bottom of main-stage (above playback bar)
+        // main-stage is flex column.
+
+        // Simpler: Just calculate height based on mouse Y and window height/playback bar
+        // Distance from mouse to bottom of playback bar (which is window bottom in full height app)
+        // playback bar is 60px.
+
+        const bottomOffset = window.innerHeight - e.clientY - 60; // 60 is playback height
+        const newHeight = Math.max(50, Math.min(bottomOffset, 400)); // Clamp
+
+        container.style.height = `${newHeight}px`;
+        automationController.resize();
+    });
+
+    window.addEventListener('mouseup', () => {
+        isResizing = false;
+        document.body.style.cursor = 'default';
+        if (hyperlapse) hyperlapse.setSize(pano.clientWidth, pano.clientHeight);
+    });
 }
 
 function generateRoute() {
     updateStatus("Generating route...");
 
-    // Clear existing markers
+    // Clear existing route markers
     routeMarkers.forEach(m => m.map = null);
     routeMarkers = [];
 
@@ -213,70 +494,176 @@ function generateRoute() {
 }
 
 function handleDirectionsChanged() {
+    if (ignoreDirectionsChange) return;
+
     const result = directionsRenderer.getDirections();
     if (!result || !result.routes || !result.routes.length) return;
 
     const route = result.routes[0];
     const legs = route.legs;
 
-    startPin.position = legs[0].start_location;
-    endPin.position = legs[legs.length - 1].end_location;
+    config.startPoint = legs[0].start_location;
+    config.endPoint = legs[legs.length - 1].end_location;
+
+    startPin.position = config.startPoint;
+    endPin.position = config.endPoint;
 
     // Update waypoints
     waypoints = [];
-    waypointMarkers.forEach(m => m.map = null);
-    waypointMarkers = [];
+    refreshWaypointMarkers([]); // Clear markers first, will rebuild
 
     for (let i = 0; i < legs.length - 1; i++) {
         const wpLoc = legs[i].end_location;
         waypoints.push({ location: wpLoc, stopover: true });
-
-        const wpPin = createPin(wpLoc, '#FF9800', '#EF6C00'); // Orange
-        waypointMarkers.push(wpPin);
     }
 
+    refreshWaypointMarkers(waypoints.map(wp => wp.location));
     generateRoute();
 }
 
+function refreshWaypointMarkers(locations) {
+    waypointMarkers.forEach(m => m.map = null);
+    waypointMarkers = [];
+
+    locations.forEach(loc => {
+        const wpPin = createPin(loc, '#FF9800', '#EF6C00'); // Orange
+        waypointMarkers.push(wpPin);
+    });
+}
+
 function updateStatus(msg) {
-    els.status.textContent = msg;
+    if (els.status) els.status.textContent = msg;
 }
 
 function updateProgressBar(current, total) {
     els.frameCounter.textContent = `Frame ${current + 1}/${total}`;
 }
 
+// Context Menu Logic
+function setupContextMenu() {
+    document.addEventListener('click', hideContextMenu);
+    contextMenu.el.addEventListener('click', (e) => e.stopPropagation());
+
+    contextMenu.skipItem.addEventListener('click', () => {
+        if (contextMenu.currentPoint && contextMenu.currentMarkerEl) {
+            contextMenu.currentPoint.is_skipped = true;
+            contextMenu.currentMarkerEl.style.backgroundColor = '#9E9E9E'; // Gray
+            contextMenu.currentMarkerEl.style.borderColor = '#616161';
+        }
+        hideContextMenu();
+    });
+
+    contextMenu.includeItem.addEventListener('click', () => {
+        if (contextMenu.currentPoint && contextMenu.currentMarkerEl) {
+            contextMenu.currentPoint.is_skipped = false;
+            contextMenu.currentMarkerEl.style.backgroundColor = '#FFEB3B'; // Yellow
+            contextMenu.currentMarkerEl.style.borderColor = '#FBC02D';
+        }
+        hideContextMenu();
+    });
+}
+
+function showContextMenu(x, y, point, markerElement) {
+    contextMenu.currentPoint = point;
+    contextMenu.currentMarkerEl = markerElement;
+
+    if (point.is_skipped) {
+        contextMenu.skipItem.style.display = 'none';
+        contextMenu.includeItem.style.display = 'block';
+    } else {
+        contextMenu.skipItem.style.display = 'block';
+        contextMenu.includeItem.style.display = 'none';
+    }
+
+    contextMenu.el.style.left = x + 'px';
+    contextMenu.el.style.top = y + 'px';
+    contextMenu.el.style.display = 'block';
+}
+
+function hideContextMenu() {
+    contextMenu.el.style.display = 'none';
+    contextMenu.currentPoint = null;
+    contextMenu.currentMarkerEl = null;
+}
+
+
 function setupEventListeners() {
     // Window Resize
     window.addEventListener('resize', () => {
-        hyperlapse.setSize(els.panoContainer.clientWidth, els.panoContainer.clientHeight);
+        if (hyperlapse) hyperlapse.setSize(els.panoContainer.clientWidth, els.panoContainer.clientHeight);
+        if (automationController) automationController.resize();
     });
 
-    // Sliders
-    const sliders = [
+    // Keyboard Shortcuts
+    document.addEventListener('keydown', (e) => {
+        if (e.target.tagName === 'INPUT') return;
+        switch(e.code) {
+            case 'KeyH': // Hide/Show Sidebar
+                els.sidebar.style.display = els.sidebar.style.display === 'none' ? 'flex' : 'none';
+                if(hyperlapse) setTimeout(() => hyperlapse.setSize(els.panoContainer.clientWidth, els.panoContainer.clientHeight), 100);
+                break;
+            case 'Period': // >
+            case 'ArrowRight':
+                hyperlapse.next();
+                break;
+            case 'Comma': // <
+            case 'ArrowLeft':
+                hyperlapse.prev();
+                break;
+            case 'Space':
+                togglePlay();
+                break;
+        }
+    });
+
+    // Sliders & Inputs
+    const bindings = [
         ['maxSteps', 'setMaxPoints'],
         ['distance', 'setDistanceBetweenPoint'],
         ['zoom', 'setZoom'],
         ['fov', 'setFOV'],
-        ['elevation', (v) => { hyperlapse.elevation_offset = v; }],
+        ['elevation', (v) => { hyperlapse.elevation_offset = v; updateHash(); }],
         ['tilt', (v) => { hyperlapse.tilt = v; }],
         ['offsetX', (v) => { hyperlapse.offset.x = v; }],
         ['offsetY', (v) => { hyperlapse.offset.y = v; }],
         ['offsetZ', (v) => { hyperlapse.offset.z = v; }],
-        ['duration', (v) => { hyperlapse.millis = v; }]
+        ['duration', (v) => { hyperlapse.millis = v; }],
+        ['radius', 'setRadius'],
+        ['bufferSize', (v) => { hyperlapse.buffer_size = v; }]
     ];
 
-    sliders.forEach(([id, setter]) => {
+    bindings.forEach(([id, setter]) => {
         els[id].addEventListener('input', (e) => {
             const val = parseFloat(e.target.value);
             els[`${id}Val`].textContent = val;
 
-            if (typeof setter === 'string') {
-                hyperlapse[setter](val);
-            } else {
-                setter(val);
+            if (hyperlapse) {
+                if (typeof setter === 'string') {
+                    hyperlapse[setter](val);
+                } else {
+                    setter(val);
+                }
             }
         });
+    });
+
+    // Checkbox
+    els.googleOnly.addEventListener('change', (e) => {
+        const val = e.target.checked ? google.maps.StreetViewSource.GOOGLE : google.maps.StreetViewSource.DEFAULT;
+        hyperlapse.setSource(val);
+    });
+
+    // Mode Switch
+    els.mode.addEventListener('change', (e) => {
+        const mode = e.target.value;
+        if (mode === 'LookAt') {
+            hyperlapse.use_lookat = true;
+            els.automationContainer.style.display = 'none';
+        } else {
+            hyperlapse.use_lookat = false;
+            els.automationContainer.style.display = 'flex';
+            automationController.resize();
+        }
     });
 
     // Buttons
@@ -292,14 +679,21 @@ function setupEventListeners() {
 
         pivotPin.position = c2;
         hyperlapse.setLookat(c2);
+        config.lookatPoint = c2;
 
         snapToRoad(c1, (result1) => {
             if (result1) startPin.position = result1;
             else startPin.position = c1;
+            config.startPoint = startPin.position;
 
             snapToRoad(c3, (result3) => {
                 if (result3) endPin.position = result3;
                 else endPin.position = c3;
+                config.endPoint = endPin.position;
+
+                // Clear waypoints on drop
+                waypoints = [];
+                refreshWaypointMarkers([]);
 
                 generateRoute();
             });
@@ -308,13 +702,22 @@ function setupEventListeners() {
 
     els.btnRecalculate.addEventListener('click', generateRoute);
 
+    // Export
+    els.btnExport.addEventListener('click', () => {
+        exporter.export({
+            ratio: els.exportRatio.value,
+            mode: els.exportMode.value
+        });
+    });
+
+    // Search
     els.searchForm.addEventListener('submit', (e) => {
         e.preventDefault();
         const geocoder = new google.maps.Geocoder();
         geocoder.geocode({ 'address': els.searchInput.value }, (results, status) => {
             if (status == google.maps.GeocoderStatus.OK) {
                 map.setCenter(results[0].geometry.location);
-                // Trigger load panoramas logic
+                // Trigger load logic
                 els.btnLoad.click();
             } else {
                 alert('Geocode was not successful: ' + status);
@@ -327,9 +730,20 @@ function setupEventListeners() {
     els.btnPrev.addEventListener('click', () => hyperlapse.prev());
     els.btnNext.addEventListener('click', () => hyperlapse.next());
 
+    // Progress Bar seek
     els.progressBar.addEventListener('input', (e) => {
-        // Seek functionality needs to be exposed in Hyperlapse class or we hack it
-        // For now, we can't easily seek without modifying Hyperlapse.js
+        if(hyperlapse && hyperlapse.length() > 0) {
+            const idx = parseInt(e.target.value);
+            // We need to access internal index or use a method if available.
+            // Hyperlapse.js usually exposes point_index or similar.
+            // Checking source implies setting it might require redraw.
+            // For now, let's try calling onFrame manually or pause and set.
+             // Accessing private/internal state if no API exists.
+             if (hyperlapse.point_index !== undefined) {
+                 hyperlapse.point_index = idx;
+                 hyperlapse.drawMaterial();
+             }
+        }
     });
 }
 
