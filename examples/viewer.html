@@ -38,10 +38,36 @@
 		#map_form {
 			margin-bottom: 10px;
 		}
+		#context-menu {
+			display: none;
+			position: absolute;
+			z-index: 1000;
+			background-color: white;
+			border: 1px solid #ccc;
+			border-radius: 4px;
+			box-shadow: 2px 2px 5px rgba(0,0,0,0.2);
+			padding: 5px 0;
+			min-width: 120px;
+		}
+		#context-menu ul {
+			list-style: none;
+			margin: 0;
+			padding: 0;
+		}
+		#context-menu li {
+			padding: 8px 12px;
+			cursor: pointer;
+			font-size: 14px;
+			color: #333;
+		}
+		#context-menu li:hover {
+			background-color: #f0f0f0;
+		}
 	</style>
 	<script type="module">
 		import * as dat from 'dat.gui';
 		import { Hyperlapse } from '../src/Hyperlapse.js';
+		import { HyperlapseExporter } from '../src/HyperlapseExporter.js';
 		import { loadGoogleMaps } from '../src/GoogleMapsLoader.js';
 	
 		var start_point, end_point, lookat_point;
@@ -52,6 +78,7 @@
 		var _waypoint_markers = [];
 		var _waypoints = [];
 		var parts;
+		var ignore_directions_change = false;
 
 		function show(msg) {
 			document.getElementById("text").innerHTML = msg;
@@ -159,6 +186,14 @@
 			});
 			directions_renderer.setMap(map);
 
+			function clearRouteMarkers() {
+				var marker;
+				while(_route_markers.length > 0) {
+					marker = _route_markers.pop();
+					marker.setMap(null);
+				}
+			}
+
 			directions_renderer.addListener('directions_changed', function() {
 				var result = directions_renderer.getDirections();
 				if (!result || !result.routes || !result.routes.length) return;
@@ -207,6 +242,10 @@
 				}
 
 				changeHash();
+
+				if (ignore_directions_change) return;
+
+				clearRouteMarkers();
 				hyperlapse.generate({ route: result });
 			});
 
@@ -222,7 +261,7 @@
 
 			start_pin = new google.maps.marker.AdvancedMarkerElement({
 				position: start_point,
-				gmpDraggable: false, // Use DirectionsRenderer for dragging
+				gmpDraggable: true,
 				map: map,
 				content: new google.maps.marker.PinElement({
 					background: '#4CAF50', // Green
@@ -230,11 +269,15 @@
 					glyphColor: 'white',
 				}).element,
 			});
-			start_pin.element.style.pointerEvents = 'none';
+
+			start_pin.addEventListener('dragend', function (event) {
+				start_point = start_pin.position;
+				o.generate();
+			});
 
 			end_pin = new google.maps.marker.AdvancedMarkerElement({
 				position: end_point,
-				gmpDraggable: false, // Use DirectionsRenderer for dragging
+				gmpDraggable: true,
 				map: map,
 				content: new google.maps.marker.PinElement({
 					background: '#F44336', // Red
@@ -242,7 +285,11 @@
 					glyphColor: 'white',
 				}).element,
 			});
-			end_pin.element.style.pointerEvents = 'none';
+
+			end_pin.addEventListener('dragend', function (event) {
+				end_point = end_pin.position;
+				o.generate();
+			});
 
 			pivot_pin = new google.maps.marker.AdvancedMarkerElement({
 				position: lookat_point,
@@ -323,23 +370,102 @@
 				show( "ERROR: "+ e.message );
 			};
 
+			function createYellowCircleElement() {
+				const el = document.createElement('div');
+				el.style.width = '10px';
+				el.style.height = '10px';
+				el.style.backgroundColor = '#FFEB3B'; // Yellow
+				el.style.border = '2px solid #FBC02D'; // Darker yellow border
+				el.style.borderRadius = '50%';
+				el.style.cursor = 'pointer';
+				return el;
+			}
+
+			// Context Menu logic
+			const contextMenu = document.getElementById('context-menu');
+			const skipItem = document.getElementById('menu-skip');
+			const includeItem = document.getElementById('menu-include');
+			let currentContextPoint = null;
+			let currentContextMarkerElement = null;
+
+			function showContextMenu(x, y, point, markerElement) {
+				currentContextPoint = point;
+				currentContextMarkerElement = markerElement;
+
+				if (point.is_skipped) {
+					skipItem.style.display = 'none';
+					includeItem.style.display = 'block';
+				} else {
+					skipItem.style.display = 'block';
+					includeItem.style.display = 'none';
+				}
+
+				contextMenu.style.left = x + 'px';
+				contextMenu.style.top = y + 'px';
+				contextMenu.style.display = 'block';
+			}
+
+			function hideContextMenu() {
+				contextMenu.style.display = 'none';
+				currentContextPoint = null;
+				currentContextMarkerElement = null;
+			}
+
+			document.addEventListener('click', hideContextMenu);
+
+			// Prevent context menu from closing when clicking inside it
+			contextMenu.addEventListener('click', (e) => e.stopPropagation());
+
+			skipItem.addEventListener('click', () => {
+				if (currentContextPoint && currentContextMarkerElement) {
+					currentContextPoint.is_skipped = true;
+					currentContextMarkerElement.style.backgroundColor = '#9E9E9E'; // Gray
+					currentContextMarkerElement.style.borderColor = '#616161';
+				}
+				hideContextMenu();
+			});
+
+			includeItem.addEventListener('click', () => {
+				if (currentContextPoint && currentContextMarkerElement) {
+					currentContextPoint.is_skipped = false;
+					currentContextMarkerElement.style.backgroundColor = '#FFEB3B'; // Yellow
+					currentContextMarkerElement.style.borderColor = '#FBC02D';
+				}
+				hideContextMenu();
+			});
+
+
 			hyperlapse.onRouteProgress = function(e) {
-				_route_markers.push( new google.maps.marker.AdvancedMarkerElement({
+				const el = createYellowCircleElement();
+				var marker = new google.maps.marker.AdvancedMarkerElement({
 					position: e.point.location,
-					gmpDraggable: false,
-					content: new google.maps.marker.PinElement({
-						background: '#FFEB3B', // Yellow
-						borderColor: '#FBC02D',
-						glyphColor: 'black',
-						scale: 0.5, // Make it smaller
-					}).element,
+					gmpDraggable: true,
+					content: el,
 					map: map
-					})
-				);
+				});
+
+				// Attach context menu listener to the marker element
+				el.addEventListener('contextmenu', function(event) {
+					event.preventDefault();
+					event.stopPropagation();
+					showContextMenu(event.clientX, event.clientY, e.point, el);
+				});
+
+				marker.addEventListener('dragend', function (event) {
+					_waypoints.push({
+						location: marker.position,
+						stopover: true
+					});
+					o.generate();
+				});
+
+				_route_markers.push( marker );
 			};
 
 			hyperlapse.onRouteComplete = function(e) {
+				ignore_directions_change = true;
 				directions_renderer.setDirections(e.response);
+				ignore_directions_change = false;
 				show( "Number of Points: "+ hyperlapse.length() );
 				hyperlapse.load();
 			};
@@ -423,17 +549,21 @@
 				use_lookat:true,
 				screen_width: window.innerWidth,
 				screen_height: window.innerHeight,
+				radius: 15,
+				google_only: false,
+				preference: 'nearest',
+				buffer_size: 10,
 				generate:function(){
 					show( "Generating route..." );
 
-					var marker;
-					while(_route_markers.length > 0) {
-						marker = _route_markers.pop();
-						marker.setMap(null);
-					}
+					clearRouteMarkers();
 
 					if(start_pin) start_point = start_pin.position;
 					if(end_pin) end_point = end_pin.position;
+					if(pivot_pin) {
+						lookat_point = pivot_pin.position;
+						hyperlapse.setLookat(lookat_point);
+					}
 
 					if (!start_point || !end_point) {
 						console.log("Start or End point not defined.");
@@ -564,6 +694,26 @@
 				hyperlapse.use_lookat = value;
 			});
 
+			var radius_control = parameters.add(o, 'radius', 5, 100);
+			radius_control.onChange(function(value) {
+				hyperlapse.setRadius(value);
+			});
+
+			var google_only_control = parameters.add(o, 'google_only');
+			google_only_control.onChange(function(value) {
+				hyperlapse.setSource(value ? google.maps.StreetViewSource.GOOGLE : google.maps.StreetViewSource.DEFAULT);
+			});
+
+			var preference_control = parameters.add(o, 'preference', ['nearest', 'best']);
+			preference_control.onChange(function(value) {
+				hyperlapse.setPreference(value === 'best' ? google.maps.StreetViewPreference.BEST : google.maps.StreetViewPreference.NEAREST);
+			});
+
+			var buffer_control = parameters.add(o, 'buffer_size', 5, 50).step(1);
+			buffer_control.onChange(function(value) {
+				hyperlapse.buffer_size = value;
+			});
+
 			parameters.open();
 			
 
@@ -573,6 +723,24 @@
 			play_controls.add(hyperlapse, 'next');
 			play_controls.add(hyperlapse, 'prev');
 			play_controls.open();
+
+			var exporter = new HyperlapseExporter(hyperlapse);
+			var export_params = {
+				ratio: 'screen',
+				mode: 'loop',
+				export: function() {
+					exporter.export({
+						ratio: export_params.ratio,
+						mode: export_params.mode
+					});
+				}
+			};
+
+			var export_folder = gui.addFolder('Export');
+			export_folder.add(export_params, 'ratio', ['screen', '16:9', '9:16']);
+			export_folder.add(export_params, 'mode', ['single', 'loop']);
+			export_folder.add(export_params, 'export').name('Export Video');
+			export_folder.open();
 
 			gui.add(o, 'drop_pins');
 			gui.add(o, 'generate');
@@ -627,6 +795,11 @@
 		<div id="text"></div>
 	</div>
 	
-	
+	<div id="context-menu">
+		<ul>
+			<li id="menu-skip">Skip the frame</li>
+			<li id="menu-include">Include frame</li>
+		</ul>
+	</div>
 </body> 
 </html>
