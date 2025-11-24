@@ -71,14 +71,28 @@
                     </div>
                 </div>
 
-                <!-- Advanced (Collapsed by default - implemented as open for now for simplicity or use details/summary) -->
+                <!-- Advanced Settings -->
                 <details class="section">
                     <summary class="section-title">ADVANCED</summary>
+                    <div class="control-group">
+                        <label for="mode">Mode</label>
+                        <select id="mode" class="input-select">
+                            <option value="LookAt">LookAt</option>
+                            <option value="Automation">Automation</option>
+                        </select>
+                    </div>
                     <div class="control-group">
                         <label for="tilt">Tilt</label>
                         <div class="slider-container">
                             <input type="range" id="tilt" min="-3.14" max="3.14" step="0.01" value="0">
                             <span id="tilt-val">0</span>
+                        </div>
+                    </div>
+                    <div class="control-group">
+                        <label for="smoothing">Smoothing</label>
+                        <div class="slider-container">
+                            <input type="range" id="smoothing" min="0" max="0.95" step="0.01" value="0">
+                            <span id="smoothing-val">0</span>
                         </div>
                     </div>
                      <div class="control-group">
@@ -102,6 +116,24 @@
                             <span id="offset-z-val">0</span>
                         </div>
                     </div>
+                    <div class="control-group">
+                        <label for="radius">Radius</label>
+                        <div class="slider-container">
+                            <input type="range" id="radius" min="5" max="100" value="15">
+                            <span id="radius-val">15</span>
+                        </div>
+                    </div>
+                    <div class="control-group">
+                        <label for="buffer-size">Buffer Size</label>
+                        <div class="slider-container">
+                            <input type="range" id="buffer-size" min="5" max="50" step="1" value="10">
+                            <span id="buffer-size-val">10</span>
+                        </div>
+                    </div>
+                    <div class="control-group checkbox-group">
+                        <label for="google-only">Google Only</label>
+                        <input type="checkbox" id="google-only">
+                    </div>
                 </details>
 
                 <!-- Animation Settings -->
@@ -115,6 +147,28 @@
                         </div>
                     </div>
                 </div>
+
+                 <!-- Export Settings -->
+                 <div class="section">
+                    <h2 class="section-title">EXPORT</h2>
+                    <div class="control-group">
+                        <label for="export-ratio">Ratio</label>
+                        <select id="export-ratio" class="input-select">
+                            <option value="screen">Screen</option>
+                            <option value="16:9">16:9</option>
+                            <option value="9:16">9:16</option>
+                        </select>
+                    </div>
+                    <div class="control-group">
+                        <label for="export-mode">Export Mode</label>
+                        <select id="export-mode" class="input-select">
+                            <option value="loop">Loop</option>
+                            <option value="single">Single Pass</option>
+                        </select>
+                    </div>
+                    <button id="btn-export" class="btn-primary">EXPORT VIDEO</button>
+                </div>
+
                  <!-- Search -->
                 <div class="section">
                      <h2 class="section-title">SEARCH</h2>
@@ -131,10 +185,20 @@
             <div id="map-container">
                 <!-- Google Maps will be injected here -->
             </div>
+
             <div id="pano-container">
                 <!-- Street View/Hyperlapse will be injected here -->
             </div>
             
+            <!-- Resize Handle -->
+            <div id="automation-resize-handle"></div>
+
+            <!-- Automation Panel -->
+            <div id="automation-container">
+                <div id="automation-header">AUTOMATION CURVE</div>
+                <div id="automation-panel"></div>
+            </div>
+
             <!-- Playback Controls -->
             <div id="playback-bar">
                 <div id="frame-counter">Frame 0/0</div>
@@ -156,6 +220,15 @@
             </div>
         </main>
     </div>
+
+    <!-- Context Menu -->
+    <div id="context-menu">
+        <ul>
+            <li id="menu-skip">Skip the frame</li>
+            <li id="menu-include">Include frame</li>
+        </ul>
+    </div>
+
     <script type="module" src="/src/main.js"></script>
 </body>
 </html>
