@@ -5,7 +5,7 @@ This file contains instructions for Jules (the agent) on how to manage branches 
 ## Branching Strategy
 
 When creating a new branch, you must adhere to the following naming convention:
-`{task type}/{task name or short description}`
+`{task type}-{task name or short description}`
 
 ### Allowed Task Types
 *   **feature**: For new features or significant additions.
@@ -13,10 +13,10 @@ When creating a new branch, you must adhere to the following naming convention:
 *   **chore**: For maintenance tasks, documentation, refactoring, tests, or styling changes.
 
 ### Examples
-*   `feature/add-login-button`
-*   `bug/fix-header-alignment`
-*   `chore/update-readme`
-*   `chore/refactor-auth-logic`
+*   `feature-add-login-button`
+*   `bug-fix-header-alignment`
+*   `chore-update-readme`
+*   `chore-refactor-auth-logic`
 
 ## Pull Request Guidelines
 
