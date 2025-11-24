@@ -189,13 +189,14 @@ button {
 #map-container {
     flex: 1;
     background-color: #e5e3df; /* Google Maps default bg */
-    min-height: 200px;
+    min-height: 0;
 }
 
 #pano-container {
     flex: 1;
     background-color: black;
     position: relative;
+    min-height: 0;
     /* Pano container needs to shrink/grow */
 }
 

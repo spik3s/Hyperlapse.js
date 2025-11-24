@@ -456,7 +456,7 @@ function setupResizeHandle() {
         // playback bar is 60px.
 
         const bottomOffset = window.innerHeight - e.clientY - 60; // 60 is playback height
-        const newHeight = Math.max(50, Math.min(bottomOffset, 400)); // Clamp
+        const newHeight = Math.max(50, Math.min(bottomOffset, window.innerHeight - 150)); // Clamp
 
         container.style.height = `${newHeight}px`;
         automationController.resize();
