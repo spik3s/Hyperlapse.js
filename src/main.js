@@ -290,7 +290,7 @@ function initHyperlapse(apiKey) {
         apiKey: apiKey
     });
 
-    // Set initial buffer size from UI
+    // Set initial buffer size from UI (which now defaults to 60)
     hyperlapse.buffer_size = parseInt(els.bufferSize.value);
 
     hyperlapse.onError = (e) => {
@@ -437,7 +437,6 @@ function setupResizeHandle() {
     const handle = els.automationResizeHandle;
     const container = els.automationContainer;
     const pano = els.panoContainer;
-    const map = els.mapContainer;
 
     handle.addEventListener('mousedown', (e) => {
         isResizing = true;
@@ -448,18 +447,33 @@ function setupResizeHandle() {
         if (!isResizing) return;
 
         // Calculate new height relative to the bottom of the main-stage
-        // The container is at the bottom of main-stage (above playback bar)
-        // main-stage is flex column.
-
-        // Simpler: Just calculate height based on mouse Y and window height/playback bar
         // Distance from mouse to bottom of playback bar (which is window bottom in full height app)
         // playback bar is 60px.
 
         const bottomOffset = window.innerHeight - e.clientY - 60; // 60 is playback height
-        const newHeight = Math.max(50, Math.min(bottomOffset, 400)); // Clamp
+
+        // Constraints
+        // Top area (Map + Pano) must have at least ~250px.
+        // Map min-height is 200px.
+        // Pano should have at least 50px.
+        // Resizer is 5px. Header is 20px.
+
+        const maxAutomationHeight = window.innerHeight - 60 - 200 - 50;
+
+        // Ensure we don't exceed window or make top too small
+        const newHeight = Math.max(50, Math.min(bottomOffset, maxAutomationHeight));
 
         container.style.height = `${newHeight}px`;
         automationController.resize();
+
+        // Update Hyperlapse size during drag for smooth preview
+        if (hyperlapse) {
+             // We need to wait for layout update or just use the current container size
+             // Since we just set automation container height, flex should update pano height instantly
+             // However, flex update might happen in next frame or sync.
+             // We can use requestAnimationFrame to sync if needed, but direct call is okay usually.
+             hyperlapse.setSize(pano.clientWidth, pano.clientHeight);
+        }
     });
 
     window.addEventListener('mouseup', () => {
