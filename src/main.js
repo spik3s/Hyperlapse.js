@@ -451,17 +451,7 @@ function setupResizeHandle() {
         // playback bar is 60px.
 
         const bottomOffset = window.innerHeight - e.clientY - 60; // 60 is playback height
-
-        // Constraints
-        // Top area (Map + Pano) must have at least ~250px.
-        // Map min-height is 200px.
-        // Pano should have at least 50px.
-        // Resizer is 5px. Header is 20px.
-
-        const maxAutomationHeight = window.innerHeight - 60 - 200 - 50;
-
-        // Ensure we don't exceed window or make top too small
-        const newHeight = Math.max(50, Math.min(bottomOffset, maxAutomationHeight));
+        const newHeight = Math.max(50, Math.min(bottomOffset, window.innerHeight - 150)); // Clamp
 
         container.style.height = `${newHeight}px`;
         automationController.resize();
